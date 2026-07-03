@@ -13,7 +13,6 @@ data/portal-data.js
 data/*.xlsx
 data/*.xls
 data/*.xlsm
-templates/*.xlsx
 templates/previews/
 
 # QA screenshots and ad hoc exports
