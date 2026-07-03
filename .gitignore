@@ -1,0 +1,51 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.*
+
+# Runtime logs and local server state
+logs/
+*.log
+data/server-info.json
+
+# Generated / local data artifacts
+data/portal-data.js
+data/*.xlsx
+data/*.xls
+data/*.xlsm
+templates/*.xlsx
+templates/previews/
+
+# QA screenshots and ad hoc exports
+qa/
+preview.png
+*.csv
+
+# Python / Node caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
+.parcel-cache/
+.vite/
+dist/
+build/
+
+# Local environment and editor files
+.env
+.env.*
+!.env.example
+.vscode/
+.idea/
+
+# OS and Office temporary files
+.DS_Store
+Thumbs.db
+desktop.ini
+~$*.xlsx
+~$*.xls
+~$*.xlsm
+*.tmp
+*.bak

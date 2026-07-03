@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>华泰互联网</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="主导航">
+      <div class="brand">
+        <div class="brand-mark">HT</div>
+        <div>
+          <h1>华泰互联网</h1>
+          <p>研究数据监测</p>
+        </div>
+      </div>
+
+      <nav class="nav-list">
+        <button class="nav-item active" data-section="ai" type="button">
+          <i data-lucide="bot"></i><span>AI 产品</span>
+        </button>
+        <button class="nav-item" data-section="beike" type="button">
+          <i data-lucide="home"></i><span>贝壳</span>
+        </button>
+        <button class="nav-item" data-section="detail" type="button">
+          <i data-lucide="table-2"></i><span>指标明细</span>
+        </button>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <div class="eyebrow">互联网行业研究</div>
+          <h2>华泰互联网</h2>
+        </div>
+      </header>
+
+      <section class="section-pane active" data-pane="ai">
+        <section class="briefing-panel">
+          <div class="panel-head">
+            <div>
+              <span class="panel-kicker">AI 产品</span>
+              <h3>AI 产品核心指标</h3>
+            </div>
+          </div>
+          <div class="kpi-grid" id="aiKpiGrid"></div>
+        </section>
+
+        <section class="dashboard-grid">
+          <div class="panel chart-panel">
+            <div class="panel-head">
+              <div>
+                <span class="panel-kicker">DAU</span>
+                <h3>ChatGPT 与 Gemini DAU</h3>
+              </div>
+              <div class="control-row">
+                <select id="aiDauRegion" class="select-control" aria-label="AI DAU 地区">
+                  <option value="Global">全球</option>
+                  <option value="US">美国</option>
+                </select>
+              </div>
+            </div>
+            <div class="chart wide-chart" id="aiDauChart"></div>
+          </div>
+
+          <div class="panel chart-panel">
+            <div class="panel-head">
+              <div>
+                <span class="panel-kicker">人均时长</span>
+                <h3>ChatGPT 与 Gemini 人均使用时长</h3>
+              </div>
+              <div class="control-row">
+                <select id="aiAvgRegion" class="select-control" aria-label="AI 人均时长地区">
+                  <option value="Global">全球</option>
+                  <option value="US">美国</option>
+                </select>
+              </div>
+            </div>
+            <div class="chart wide-chart" id="aiAvgTimeChart"></div>
+          </div>
+        </section>
+
+        <section class="panel table-panel tabbed-panel">
+          <div class="panel-head">
+            <div>
+              <span class="panel-kicker">指标明细</span>
+              <h3>AI 产品分项数据</h3>
+            </div>
+            <div class="tab-list" data-tab-group="aiPageTables">
+              <button class="tab-button active" data-tab-target="aiPageDau" type="button">DAU</button>
+              <button class="tab-button" data-tab-target="aiPageAvgTime" type="button">人均时长</button>
+            </div>
+          </div>
+
+          <div class="tab-panel active" data-tab-panel="aiPageDau">
+            <div class="panel-head">
+              <div>
+                <span class="panel-kicker">DAU</span>
+                <h3>AI 产品 DAU</h3>
+              </div>
+              <button class="ghost-button export-block-button" data-export-block="ai.dau" type="button">
+                <i data-lucide="download"></i><span>导出</span>
+              </button>
+            </div>
+            <div class="table-caption" id="aiPageDauCaption"></div>
+            <div class="table-wrap resizable-table page-table">
+              <table id="aiPageDauTable"></table>
+            </div>
+          </div>
+
+          <div class="tab-panel" data-tab-panel="aiPageAvgTime">
+            <div class="panel-head">
+              <div>
+                <span class="panel-kicker">人均时长</span>
+                <h3>AI 产品人均使用时长</h3>
+              </div>
+              <button class="ghost-button export-block-button" data-export-block="ai.avgTime" type="button">
+                <i data-lucide="download"></i><span>导出</span>
+              </button>
+            </div>
+            <div class="table-caption" id="aiPageAvgTimeCaption"></div>
+            <div class="table-wrap resizable-table page-table">
+              <table id="aiPageAvgTimeTable"></table>
+            </div>
+          </div>
+        </section>
+
+      </section>
+
+      <section class="section-pane" data-pane="beike">
+        <section class="briefing-panel">
+          <div class="panel-head">
+            <div>
+              <span class="panel-kicker">贝壳</span>
+              <h3>贝壳核心指标</h3>
+            </div>
+          </div>
+          <div class="kpi-grid" id="beikeKpiGrid"></div>
+        </section>
+
+        <section class="dashboard-grid">
+          <div class="panel chart-panel">
+            <div class="panel-head">
+              <div>
+                <span class="panel-kicker">核心 WAU</span>
+                <h3>核心 App WAU</h3>
+              </div>
+            </div>
+            <div class="chart wide-chart" id="beikeCoreWauChart"></div>
+          </div>
+
+          <div class="panel chart-panel">
+            <div class="panel-head">
+              <div>
+                <span class="panel-kicker">使用时长</span>
+                <h3>核心 App 使用总时长</h3>
+              </div>
+            </div>
+            <div class="chart wide-chart" id="beikeCoreDurationChart"></div>
+          </div>
+
+          <div class="panel chart-panel">
+            <div class="panel-head">
+              <div>
+                <span class="panel-kicker">城市分布</span>
+                <h3>贝壳找房城市 WAU</h3>
+              </div>
+            </div>
+            <div class="chart" id="beikeCityChart"></div>
+          </div>
+
+          <div class="panel chart-panel">
+            <div class="panel-head">
+              <div>
+                <span class="panel-kicker">年度序列</span>
+                <h3>贝壳找房历年 WAU</h3>
+              </div>
+            </div>
+            <div class="chart" id="beikeYearlyWauChart"></div>
+          </div>
+
+          <div class="panel chart-panel">
+            <div class="panel-head">
+              <div>
+                <span class="panel-kicker">年度序列</span>
+                <h3>贝壳找房历年人均单日使用时长</h3>
+              </div>
+            </div>
+            <div class="chart" id="beikeYearlyAvgTimeChart"></div>
+          </div>
+        </section>
+
+        <section class="panel table-panel tabbed-panel">
+          <div class="panel-head">
+            <div>
+              <span class="panel-kicker">指标明细</span>
+              <h3>贝壳分项数据</h3>
+            </div>
+            <div class="tab-list" data-tab-group="beikePageTables">
+              <button class="tab-button active" data-tab-target="beikePageCoreWau" type="button">核心 App WAU</button>
+              <button class="tab-button" data-tab-target="beikePageCoreDuration" type="button">核心 App 使用总时长</button>
+              <button class="tab-button" data-tab-target="beikePageCityWau" type="button">城市 WAU</button>
+              <button class="tab-button" data-tab-target="beikePageYearlyWau" type="button">历年 WAU</button>
+              <button class="tab-button" data-tab-target="beikePageYearlyAvgTime" type="button">历年人均使用时长</button>
+            </div>
+          </div>
+
+          <div class="tab-panel active" data-tab-panel="beikePageCoreWau">
+            <div class="panel-head">
+              <div>
+                <span class="panel-kicker">分项数据</span>
+                <h3>核心 App WAU</h3>
+              </div>
+              <button class="ghost-button export-block-button" data-export-block="beike.coreWau" type="button">
+                <i data-lucide="download"></i><span>导出</span>
+              </button>
+            </div>
+            <div class="table-caption" id="beikePageCoreWauCaption"></div>
+            <div class="table-wrap resizable-table page-table">
+              <table id="beikePageCoreWauTable"></table>
+            </div>
+          </div>
+
+          <div class="tab-panel" data-tab-panel="beikePageCoreDuration">
+            <div class="panel-head">
+              <div>
+                <span class="panel-kicker">分项数据</span>
+                <h3>核心 App 使用总时长</h3>
+              </div>
+              <button class="ghost-button export-block-button" data-export-block="beike.coreDuration" type="button">
+                <i data-lucide="download"></i><span>导出</span>
+              </button>
+            </div>
+            <div class="table-caption" id="beikePageCoreDurationCaption"></div>
+            <div class="table-wrap resizable-table page-table">
+              <table id="beikePageCoreDurationTable"></table>
+            </div>
+          </div>
+
+          <div class="tab-panel" data-tab-panel="beikePageCityWau">
+            <div class="panel-head">
+              <div>
+                <span class="panel-kicker">分项数据</span>
+                <h3>城市 WAU</h3>
+              </div>
+              <button class="ghost-button export-block-button" data-export-block="beike.cityWau" type="button">
+                <i data-lucide="download"></i><span>导出</span>
+              </button>
+            </div>
+            <div class="table-caption" id="beikePageCityWauCaption"></div>
+            <div class="table-wrap resizable-table page-table">
+              <table id="beikePageCityWauTable"></table>
+            </div>
+          </div>
+
+          <div class="tab-panel" data-tab-panel="beikePageYearlyWau">
+            <div class="panel-head">
+              <div>
+                <span class="panel-kicker">分项数据</span>
+                <h3>历年 WAU</h3>
+              </div>
+              <button class="ghost-button export-block-button" data-export-block="beike.yearlyWau" type="button">
+                <i data-lucide="download"></i><span>导出</span>
+              </button>
+            </div>
+            <div class="table-caption" id="beikePageYearlyWauCaption"></div>
+            <div class="table-wrap resizable-table page-table">
+              <table id="beikePageYearlyWauTable"></table>
+            </div>
+          </div>
+
+          <div class="tab-panel" data-tab-panel="beikePageYearlyAvgTime">
+            <div class="panel-head">
+              <div>
+                <span class="panel-kicker">分项数据</span>
+                <h3>历年人均单日使用时长</h3>
+              </div>
+              <button class="ghost-button export-block-button" data-export-block="beike.yearlyAvgTime" type="button">
+                <i data-lucide="download"></i><span>导出</span>
+              </button>
+            </div>
+            <div class="table-caption" id="beikePageYearlyAvgTimeCaption"></div>
+            <div class="table-wrap resizable-table page-table">
+              <table id="beikePageYearlyAvgTimeTable"></table>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <section class="section-pane" data-pane="detail">
+        <section class="detail-group">
+          <div class="detail-heading">
+            <span class="panel-kicker">AI 产品</span>
+            <h3>AI 产品指标明细</h3>
+          </div>
+          <section class="panel table-panel tabbed-panel">
+            <div class="panel-head">
+              <div>
+                <span class="panel-kicker">指标明细</span>
+                <h3>AI 产品分项数据</h3>
+              </div>
+              <div class="tab-list" data-tab-group="aiDetail">
+                <button class="tab-button active" data-tab-target="aiDetailDau" type="button">DAU</button>
+                <button class="tab-button" data-tab-target="aiDetailAvgTime" type="button">人均时长</button>
+              </div>
+            </div>
+
+            <div class="tab-panel active" data-tab-panel="aiDetailDau">
+              <div class="panel-head">
+                <div>
+                  <span class="panel-kicker">DAU</span>
+                  <h3>AI 产品 DAU</h3>
+                </div>
+                <button class="ghost-button export-block-button" data-export-block="ai.dau" type="button">
+                  <i data-lucide="download"></i><span>导出</span>
+                </button>
+              </div>
+              <div class="table-caption" id="aiDauCaption"></div>
+              <div class="table-wrap resizable-table">
+                <table id="aiDauTable"></table>
+              </div>
+            </div>
+
+            <div class="tab-panel" data-tab-panel="aiDetailAvgTime">
+              <div class="panel-head">
+                <div>
+                  <span class="panel-kicker">人均时长</span>
+                  <h3>AI 产品人均使用时长</h3>
+                </div>
+                <button class="ghost-button export-block-button" data-export-block="ai.avgTime" type="button">
+                  <i data-lucide="download"></i><span>导出</span>
+                </button>
+              </div>
+              <div class="table-caption" id="aiAvgTimeCaption"></div>
+              <div class="table-wrap resizable-table">
+                <table id="aiAvgTimeTable"></table>
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <section class="detail-group">
+          <div class="detail-heading">
+            <span class="panel-kicker">贝壳</span>
+            <h3>贝壳指标明细</h3>
+          </div>
+          <section class="panel table-panel tabbed-panel">
+            <div class="panel-head">
+              <div>
+                <span class="panel-kicker">指标明细</span>
+                <h3>贝壳分项数据</h3>
+              </div>
+              <div class="tab-list" data-tab-group="beikeDetail">
+                <button class="tab-button active" data-tab-target="beikeDetailCoreWau" type="button">核心 App WAU</button>
+                <button class="tab-button" data-tab-target="beikeDetailCoreDuration" type="button">核心 App 使用总时长</button>
+                <button class="tab-button" data-tab-target="beikeDetailCityWau" type="button">城市 WAU</button>
+                <button class="tab-button" data-tab-target="beikeDetailYearlyWau" type="button">历年 WAU</button>
+                <button class="tab-button" data-tab-target="beikeDetailYearlyAvgTime" type="button">历年人均使用时长</button>
+              </div>
+            </div>
+
+            <div class="tab-panel active" data-tab-panel="beikeDetailCoreWau">
+              <div class="panel-head">
+                <div>
+                  <span class="panel-kicker">分项数据</span>
+                  <h3>核心 App WAU</h3>
+                </div>
+                <button class="ghost-button export-block-button" data-export-block="beike.coreWau" type="button">
+                  <i data-lucide="download"></i><span>导出</span>
+                </button>
+              </div>
+              <div class="table-caption" id="beikeCoreWauCaption"></div>
+              <div class="table-wrap resizable-table">
+                <table id="beikeCoreWauTable"></table>
+              </div>
+            </div>
+
+            <div class="tab-panel" data-tab-panel="beikeDetailCoreDuration">
+              <div class="panel-head">
+                <div>
+                  <span class="panel-kicker">分项数据</span>
+                  <h3>核心 App 使用总时长</h3>
+                </div>
+                <button class="ghost-button export-block-button" data-export-block="beike.coreDuration" type="button">
+                  <i data-lucide="download"></i><span>导出</span>
+                </button>
+              </div>
+              <div class="table-caption" id="beikeCoreDurationCaption"></div>
+              <div class="table-wrap resizable-table">
+                <table id="beikeCoreDurationTable"></table>
+              </div>
+            </div>
+
+            <div class="tab-panel" data-tab-panel="beikeDetailCityWau">
+              <div class="panel-head">
+                <div>
+                  <span class="panel-kicker">分项数据</span>
+                  <h3>城市 WAU</h3>
+                </div>
+                <button class="ghost-button export-block-button" data-export-block="beike.cityWau" type="button">
+                  <i data-lucide="download"></i><span>导出</span>
+                </button>
+              </div>
+              <div class="table-caption" id="beikeCityWauCaption"></div>
+              <div class="table-wrap resizable-table">
+                <table id="beikeCityWauTable"></table>
+              </div>
+            </div>
+
+            <div class="tab-panel" data-tab-panel="beikeDetailYearlyWau">
+              <div class="panel-head">
+                <div>
+                  <span class="panel-kicker">分项数据</span>
+                  <h3>历年 WAU</h3>
+                </div>
+                <button class="ghost-button export-block-button" data-export-block="beike.yearlyWau" type="button">
+                  <i data-lucide="download"></i><span>导出</span>
+                </button>
+              </div>
+              <div class="table-caption" id="beikeYearlyWauCaption"></div>
+              <div class="table-wrap resizable-table">
+                <table id="beikeYearlyWauTable"></table>
+              </div>
+            </div>
+
+            <div class="tab-panel" data-tab-panel="beikeDetailYearlyAvgTime">
+              <div class="panel-head">
+                <div>
+                  <span class="panel-kicker">分项数据</span>
+                  <h3>历年人均单日使用时长</h3>
+                </div>
+                <button class="ghost-button export-block-button" data-export-block="beike.yearlyAvgTime" type="button">
+                  <i data-lucide="download"></i><span>导出</span>
+                </button>
+              </div>
+              <div class="table-caption" id="beikeYearlyAvgTimeCaption"></div>
+              <div class="table-wrap resizable-table">
+                <table id="beikeYearlyAvgTimeTable"></table>
+              </div>
+            </div>
+          </section>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <script src="vendor/echarts.min.js"></script>
+  <script src="vendor/lucide.min.js"></script>
+  <script src="data/portal-data.js"></script>
+  <script src="js/data-sync.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
