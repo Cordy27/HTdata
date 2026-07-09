@@ -9,11 +9,13 @@ import sys
 import webbrowser
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 SYNC_SCRIPT = ROOT_DIR / "tools" / "sync_data.py"
+NEWS_SYNC_SCRIPT = ROOT_DIR / "tools" / "sync_news.py"
+ACCESS_SYNC_SCRIPT = ROOT_DIR / "tools" / "sync_access.py"
 SERVER_INFO = ROOT_DIR / "data" / "server-info.json"
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -22,11 +24,11 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 
-def run_sync() -> dict:
+def run_script(script: Path) -> dict:
     env = os.environ.copy()
     env["PYTHONIOENCODING"] = "utf-8"
     result = subprocess.run(
-        [sys.executable, str(SYNC_SCRIPT)],
+        [sys.executable, str(script)],
         cwd=str(ROOT_DIR),
         capture_output=True,
         text=True,
@@ -45,6 +47,18 @@ def run_sync() -> dict:
     return payload
 
 
+def run_sync() -> dict:
+    access_payload = run_script(ACCESS_SYNC_SCRIPT)
+    excel_payload = run_script(SYNC_SCRIPT)
+    news_payload = run_script(NEWS_SYNC_SCRIPT)
+    return {
+        "ok": True,
+        "access": access_payload,
+        "excel": excel_payload,
+        "news": news_payload,
+    }
+
+
 class PortalHandler(SimpleHTTPRequestHandler):
     def log_message(self, format, *args):
         print(f"{self.address_string()} - - [{self.log_date_time_string()}] {format % args}", flush=True)
@@ -57,6 +71,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
         if urlparse(self.path).path == "/__sync":
             self.handle_sync()
             return
+        if self.should_serve_app_shell():
+            self.path = "/index.html"
         super().do_GET()
 
     def do_POST(self):
@@ -78,6 +94,20 @@ class PortalHandler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def should_serve_app_shell(self) -> bool:
+        parsed = urlparse(self.path)
+        path = unquote(parsed.path)
+        if path in {"", "/"}:
+            return False
+        if Path(path).suffix:
+            return False
+        target = (ROOT_DIR / path.lstrip("/")).resolve()
+        try:
+            target.relative_to(ROOT_DIR)
+        except ValueError:
+            return False
+        return not target.exists()
+
 
 def find_port(start: int) -> int:
     for port in range(start, start + 40):
@@ -97,7 +127,7 @@ def main() -> int:
     parser.add_argument("--no-browser", action="store_true")
     args = parser.parse_args()
 
-    print("同步 Excel 数据...")
+    print("同步访问配置、Excel 数据与资讯数据...")
     run_sync()
 
     port = find_port(args.port)
@@ -108,7 +138,7 @@ def main() -> int:
     server = ThreadingHTTPServer(("127.0.0.1", port), handler)
     url = f"http://127.0.0.1:{port}/"
     print(f"数据门户已启动：{url}")
-    print("每次启动会先自动同步 templates 文件夹中的固定填写模板。需要刷新数据时请重新启动本地服务。")
+    print("每次启动会先自动同步访问配置、templates 文件夹中的固定填写模板，并更新资讯监测数据。需要刷新数据时请重新启动本地服务。")
     if not args.no_browser:
         webbrowser.open(url)
     server.serve_forever()

@@ -10,6 +10,9 @@ data/server-info.json
 
 # Generated / local data artifacts
 data/portal-data.js
+data/news-data.js
+data/access-config.js
+data/news-cache.json
 data/*.xlsx
 data/*.xls
 data/*.xlsm

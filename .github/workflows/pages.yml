@@ -3,7 +3,18 @@ name: Deploy Pages
 on:
   push:
     branches: [main]
+  schedule:
+    - cron: "3 3,7,13 * * *"
   workflow_dispatch:
+    inputs:
+      refresh_news:
+        description: "抓取新闻并生成新日报"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
 
 permissions:
   contents: read
@@ -24,18 +35,58 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
       - name: Install dependencies
         run: python -m pip install openpyxl
 
+      - name: Generate access config
+        run: python tools/sync_access.py
+
       - name: Generate portal data
         run: python tools/sync_data.py
+
+      - name: Check news database schema
+        if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.refresh_news == 'true') }}
+        env:
+          CLOUDBASE_REQUIRED: "1"
+          CLOUDBASE_ENV_ID: ${{ secrets.CLOUDBASE_ENV_ID }}
+          CLOUDBASE_API_KEY: ${{ secrets.CLOUDBASE_API_KEY }}
+          CLOUDBASE_ACCESS_TOKEN: ${{ secrets.CLOUDBASE_ACCESS_TOKEN }}
+          CLOUDBASE_TOKEN: ${{ secrets.CLOUDBASE_TOKEN }}
+        run: python tools/sync_news.py --check-cloudbase-schema
+
+      - name: Generate news data
+        if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.refresh_news == 'true') }}
+        env:
+          CLOUDBASE_REQUIRED: "1"
+          AI_REQUIRED: "1"
+          CLOUDBASE_ENV_ID: ${{ secrets.CLOUDBASE_ENV_ID }}
+          CLOUDBASE_API_KEY: ${{ secrets.CLOUDBASE_API_KEY }}
+          CLOUDBASE_ACCESS_TOKEN: ${{ secrets.CLOUDBASE_ACCESS_TOKEN }}
+          CLOUDBASE_TOKEN: ${{ secrets.CLOUDBASE_TOKEN }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
+          AI_MODEL: ${{ secrets.AI_MODEL }}
+        run: python tools/sync_news.py
+
+      - name: Prepare Pages artifact
+        run: |
+          rm -rf pages-dist
+          mkdir -p pages-dist/data
+          cp index.html pages-dist/
+          cp index.html pages-dist/404.html
+          cp -r css js vendor pages-dist/
+          cp data/access-config.js pages-dist/data/
+          cp data/portal-data.js pages-dist/data/
+          ACCESS_PATH=$(python -c "import json; print(json.load(open('config/access.json', encoding='utf-8'))['accessPath'].strip('/'))")
+          mkdir -p "pages-dist/${ACCESS_PATH}"
+          cp index.html "pages-dist/${ACCESS_PATH}/index.html"
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: pages-dist
 
   deploy:
     environment:

@@ -4,18 +4,32 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>华泰互联网</title>
+  <script>
+    (function () {
+      var segments = window.location.pathname.split("/").filter(Boolean);
+      var isGithubProject = window.location.hostname.endsWith(".github.io") && segments.length > 0;
+      var base = isGithubProject ? "/" + segments[0] + "/" : "/";
+      window.HT_PUBLIC_BASE = base;
+      document.write('<base href="' + base + '">');
+    })();
+  </script>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
   <div class="app-shell">
     <aside class="sidebar" aria-label="主导航">
-      <div class="brand">
-        <div class="brand-mark">HT</div>
-        <div>
-          <h1>华泰互联网</h1>
-          <p>研究数据监测</p>
+      <div class="sidebar-top">
+        <div class="brand">
+          <div class="brand-mark">HT</div>
+          <div class="brand-copy">
+            <h1>华泰互联网</h1>
+            <p>研究数据监测</p>
+          </div>
         </div>
+        <button class="sidebar-toggle" id="sidebarToggle" type="button" aria-label="收起侧边栏" title="收起侧边栏">
+          <i data-lucide="panel-left-close"></i>
+        </button>
       </div>
 
       <nav class="nav-list">
@@ -24,6 +38,9 @@
         </button>
         <button class="nav-item" data-section="beike" type="button">
           <i data-lucide="home"></i><span>贝壳</span>
+        </button>
+        <button class="nav-item" data-section="news" type="button">
+          <i data-lucide="newspaper"></i><span>资讯监测</span>
         </button>
         <button class="nav-item" data-section="detail" type="button">
           <i data-lucide="table-2"></i><span>指标明细</span>
@@ -36,6 +53,11 @@
         <div>
           <div class="eyebrow">互联网行业研究</div>
           <h2>华泰互联网</h2>
+        </div>
+        <div class="toolbar">
+          <button class="ghost-button share-page-button" id="sharePageButton" type="button" hidden>
+            <i data-lucide="share-2"></i><span>分享</span>
+          </button>
         </div>
       </header>
 
@@ -291,6 +313,29 @@
         </section>
       </section>
 
+      <section class="section-pane" data-pane="news">
+        <section class="panel news-panel">
+          <div class="panel-head">
+            <div>
+              <span class="panel-kicker">新闻聚合</span>
+              <h3>重点资讯列表</h3>
+            </div>
+          </div>
+
+          <div class="news-brief-timeline" id="newsBriefTimeline" hidden></div>
+
+          <div class="tab-list news-tab-list" id="newsTagTabs"></div>
+          <div class="news-meta-row">
+            <span id="newsUpdatedAt"></span>
+          </div>
+
+          <div class="news-layout">
+            <aside class="news-source-rail" id="newsSourceList" aria-label="新闻来源分布"></aside>
+            <div class="news-list" id="newsList"></div>
+          </div>
+        </section>
+      </section>
+
       <section class="section-pane" data-pane="detail">
         <section class="detail-group">
           <div class="detail-heading">
@@ -448,8 +493,41 @@
     </main>
   </div>
 
+  <div class="share-modal" id="shareModal" hidden>
+    <div class="share-backdrop" data-share-close></div>
+    <section class="share-dialog" role="dialog" aria-modal="true" aria-labelledby="shareDialogTitle">
+      <header class="share-dialog-head">
+        <div>
+          <span class="panel-kicker">分享图片</span>
+          <h3 id="shareDialogTitle">生成当前页面图片</h3>
+        </div>
+        <button class="icon-button" type="button" data-share-close aria-label="关闭">
+          <i data-lucide="x"></i>
+        </button>
+      </header>
+      <div class="share-preview-shell">
+        <canvas id="shareCanvas" width="1080" height="1520"></canvas>
+      </div>
+      <div class="share-link-row">
+        <span id="shareLinkText"></span>
+      </div>
+      <footer class="share-actions">
+        <button class="ghost-button" id="copyShareLink" type="button">
+          <i data-lucide="copy"></i><span>复制链接</span>
+        </button>
+        <button class="primary-button" id="downloadShareImage" type="button">
+          <i data-lucide="download"></i><span>下载图片</span>
+        </button>
+      </footer>
+    </section>
+  </div>
+
   <script src="vendor/echarts.min.js"></script>
   <script src="vendor/lucide.min.js"></script>
+  <script src="vendor/qrcode.js"></script>
+  <script src="https://static.cloudbase.net/cloudbase-js-sdk/latest/cloudbase.full.js"></script>
+  <script src="js/cloudbase-config.js"></script>
+  <script src="data/access-config.js"></script>
   <script src="data/portal-data.js"></script>
   <script src="js/data-sync.js"></script>
   <script src="js/app.js"></script>
