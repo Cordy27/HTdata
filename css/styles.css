@@ -871,11 +871,12 @@ tbody tr:hover {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  min-height: 262px;
+  min-height: 318px;
   padding: 38px 13px 12px;
   background: #ffffff;
   border: 1px solid #d9e8f4;
   border-radius: var(--radius);
+  cursor: pointer;
 }
 
 .news-brief-card.is-focused {
@@ -902,6 +903,23 @@ tbody tr:hover {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.65;
+}
+
+.news-brief-forward-preview {
+  flex: 1;
+  min-height: 150px;
+  margin: 10px 0 0;
+  padding: 10px;
+  overflow: hidden;
+  color: #263a52;
+  background: #f7fafc;
+  border: 1px solid #dfeaf4;
+  border-radius: 6px;
+  font-family: "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  font-size: 12px;
+  line-height: 1.65;
+  letter-spacing: 0;
+  white-space: pre-wrap;
 }
 
 .news-brief-card ul {
@@ -970,17 +988,19 @@ tbody tr:hover {
 
 .news-brief-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
+  gap: 6px;
   margin-top: 12px;
 }
 
-.news-brief-share {
+.news-brief-action {
   height: 30px;
   padding: 0 9px;
   font-size: 12px;
 }
 
-.news-brief-share svg {
+.news-brief-action svg {
   width: 14px;
   height: 14px;
 }
@@ -1364,7 +1384,12 @@ pre {
   display: none;
 }
 
-.share-modal {
+.brief-preview-modal[hidden] {
+  display: none;
+}
+
+.share-modal,
+.brief-preview-modal {
   position: fixed;
   inset: 0;
   z-index: 80;
@@ -1373,14 +1398,20 @@ pre {
   padding: 22px;
 }
 
-.share-backdrop {
+.brief-preview-modal {
+  z-index: 82;
+}
+
+.share-backdrop,
+.brief-preview-backdrop {
   position: absolute;
   inset: 0;
   background: rgba(6, 42, 84, 0.38);
   backdrop-filter: blur(8px);
 }
 
-.share-dialog {
+.share-dialog,
+.brief-preview-dialog {
   position: relative;
   display: grid;
   width: min(860px, 100%);
@@ -1392,17 +1423,46 @@ pre {
   box-shadow: 0 28px 70px rgba(0, 63, 125, 0.22);
 }
 
+.brief-preview-dialog {
+  width: min(760px, 100%);
+}
+
 .share-dialog-head,
-.share-actions {
+.share-actions,
+.brief-preview-head,
+.brief-preview-actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 
-.share-dialog-head h3 {
+.share-dialog-head h3,
+.brief-preview-head h3 {
   margin: 4px 0 0;
   font-size: 18px;
+}
+
+.brief-preview-head p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.brief-preview-text {
+  width: 100%;
+  min-height: min(58vh, 520px);
+  margin-top: 14px;
+  padding: 16px;
+  resize: vertical;
+  color: #1d2d3f;
+  background: #f8fbfd;
+  border: 1px solid #d9e8f4;
+  border-radius: var(--radius);
+  font-family: "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  font-size: 14px;
+  line-height: 1.75;
+  letter-spacing: 0;
 }
 
 .share-preview-shell {
@@ -1439,6 +1499,12 @@ pre {
 }
 
 .share-actions {
+  margin-top: 12px;
+}
+
+.brief-preview-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
   margin-top: 12px;
 }
 

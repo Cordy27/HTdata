@@ -522,6 +522,34 @@
     </section>
   </div>
 
+  <div class="brief-preview-modal" id="briefPreviewModal" hidden>
+    <div class="brief-preview-backdrop" data-brief-preview-close></div>
+    <section class="brief-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="briefPreviewTitle">
+      <header class="brief-preview-head">
+        <div>
+          <span class="panel-kicker">外发预览</span>
+          <h3 id="briefPreviewTitle">资讯快报</h3>
+          <p id="briefPreviewMeta"></p>
+        </div>
+        <button class="icon-button" type="button" data-brief-preview-close aria-label="关闭">
+          <i data-lucide="x"></i>
+        </button>
+      </header>
+      <textarea class="brief-preview-text" id="briefPreviewText" readonly></textarea>
+      <footer class="brief-preview-actions">
+        <button class="ghost-button" id="copyBriefSmsText" type="button">
+          <i data-lucide="message-square"></i><span>复制短信版</span>
+        </button>
+        <button class="ghost-button" id="shareBriefPreviewImage" type="button">
+          <i data-lucide="image"></i><span>分享图片</span>
+        </button>
+        <button class="primary-button" id="copyBriefPreviewText" type="button">
+          <i data-lucide="copy"></i><span>复制全文</span>
+        </button>
+      </footer>
+    </section>
+  </div>
+
   <script src="vendor/echarts.min.js"></script>
   <script src="vendor/lucide.min.js"></script>
   <script src="vendor/qrcode.js"></script>

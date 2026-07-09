@@ -12,7 +12,10 @@
     resizeObserver: null,
     shareDataUrl: "",
     shareConfig: null,
-    shareUrl: ""
+    shareUrl: "",
+    previewBriefId: "",
+    previewBriefText: "",
+    previewBriefSmsText: ""
   };
 
   const colors = {
@@ -52,11 +55,20 @@
     document.querySelectorAll("[data-share-close]").forEach((button) => {
       button.addEventListener("click", closeShareModal);
     });
+    document.querySelectorAll("[data-brief-preview-close]").forEach((button) => {
+      button.addEventListener("click", closeBriefPreviewModal);
+    });
     element("copyShareLink").addEventListener("click", copyShareLink);
     element("downloadShareImage").addEventListener("click", downloadShareImage);
+    element("copyBriefPreviewText").addEventListener("click", copyBriefPreviewText);
+    element("copyBriefSmsText").addEventListener("click", copyBriefSmsText);
+    element("shareBriefPreviewImage").addEventListener("click", shareBriefPreviewImage);
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape" && !element("shareModal").hidden) {
         closeShareModal();
+      }
+      if (event.key === "Escape" && !element("briefPreviewModal").hidden) {
+        closeBriefPreviewModal();
       }
     });
     document.querySelectorAll("[data-section]").forEach((button) => {
@@ -72,6 +84,21 @@
       const briefShareButton = event.target.closest("[data-share-brief-id]");
       if (briefShareButton) {
         openBriefShareModal(briefShareButton.dataset.shareBriefId || "");
+        return;
+      }
+      const briefCopyButton = event.target.closest("[data-copy-brief-id]");
+      if (briefCopyButton) {
+        copyBriefText(briefCopyButton.dataset.copyBriefId || "", "full", briefCopyButton);
+        return;
+      }
+      const briefPreviewButton = event.target.closest("[data-preview-brief-id]");
+      if (briefPreviewButton) {
+        openBriefPreviewModal(briefPreviewButton.dataset.previewBriefId || "");
+        return;
+      }
+      const briefCard = event.target.closest("[data-brief-card-id]");
+      if (briefCard && !event.target.closest("a, button")) {
+        openBriefPreviewModal(briefCard.dataset.briefCardId || "");
         return;
       }
       const button = event.target.closest("[data-news-tag]");
@@ -283,24 +310,22 @@
       </div>
       <div class="news-brief-track">
         ${timeline.map((brief, index) => {
-          const items = (brief.items || []).slice(0, 3);
+          const previewText = formatBriefForwardText(brief, { maxItems: 2, includeLinks: false, compact: true });
           return `
             <article class="news-brief-card" data-brief-card-id="${escapeHtml(brief.id || "")}">
               <div class="news-brief-index">${index + 1}</div>
               <time>${escapeHtml(compactDateTime(brief.runAt || ""))}</time>
               <h5>${escapeHtml(brief.title || "增量信息快报")}</h5>
-              <p>${escapeHtml(brief.summary || "本轮暂无可展示摘要。")}</p>
-              <ul>
-                ${items.map((item) => `
-                  <li>
-                    <a href="${escapeHtml(item.url || "#")}" target="_blank" rel="noopener noreferrer">${escapeHtml(getBriefItemTitle(item))}</a>
-                    <span>${formatNumber(item.score || 0, 0)}</span>
-                  </li>
-                `).join("")}
-              </ul>
+              <pre class="news-brief-forward-preview">${escapeHtml(previewText)}</pre>
               <footer class="news-brief-actions">
-                <button class="ghost-button news-brief-share" data-share-brief-id="${escapeHtml(brief.id || "")}" type="button">
-                  <i data-lucide="share-2"></i><span>分享快报</span>
+                <button class="ghost-button news-brief-action" data-preview-brief-id="${escapeHtml(brief.id || "")}" type="button">
+                  <i data-lucide="eye"></i><span>预览</span>
+                </button>
+                <button class="ghost-button news-brief-action" data-copy-brief-id="${escapeHtml(brief.id || "")}" type="button">
+                  <i data-lucide="copy"></i><span>复制文本</span>
+                </button>
+                <button class="ghost-button news-brief-action" data-share-brief-id="${escapeHtml(brief.id || "")}" type="button">
+                  <i data-lucide="image"></i><span>分享图片</span>
                 </button>
               </footer>
             </article>
@@ -746,6 +771,83 @@
     await openShareModal(config);
   }
 
+  function openBriefPreviewModal(briefId) {
+    const brief = findBriefById(briefId);
+    if (!brief) {
+      return;
+    }
+    const modal = element("briefPreviewModal");
+    const text = formatBriefForwardText(brief);
+    const smsText = formatBriefSmsText(brief);
+    state.previewBriefId = brief.id || briefId;
+    state.previewBriefText = text;
+    state.previewBriefSmsText = smsText;
+    element("briefPreviewTitle").textContent = brief.title || "资讯快报";
+    element("briefPreviewMeta").textContent = `${brief.runAt || "--"} · ${brief.selectedCount || (brief.items || []).length || 0} 条入选`;
+    element("briefPreviewText").value = text;
+    modal.hidden = false;
+    document.body.classList.add("modal-open");
+    if (window.lucide) {
+      window.lucide.createIcons();
+    }
+    setTimeout(() => element("briefPreviewText").focus(), 30);
+  }
+
+  function closeBriefPreviewModal() {
+    element("briefPreviewModal").hidden = true;
+    if (element("shareModal").hidden) {
+      document.body.classList.remove("modal-open");
+    }
+  }
+
+  async function copyBriefPreviewText() {
+    await copyTextToClipboard(state.previewBriefText || "", element("copyBriefPreviewText"), "复制全文");
+  }
+
+  async function copyBriefSmsText() {
+    await copyTextToClipboard(state.previewBriefSmsText || "", element("copyBriefSmsText"), "复制短信版");
+  }
+
+  async function copyBriefText(briefId, mode = "full", button = null) {
+    const brief = findBriefById(briefId);
+    if (!brief) {
+      return;
+    }
+    const text = mode === "sms" ? formatBriefSmsText(brief) : formatBriefForwardText(brief);
+    await copyTextToClipboard(text, button, button ? button.innerText.trim() : "复制文本");
+  }
+
+  async function shareBriefPreviewImage() {
+    const briefId = state.previewBriefId;
+    closeBriefPreviewModal();
+    await openBriefShareModal(briefId);
+  }
+
+  async function copyTextToClipboard(text, button, originalLabel) {
+    if (!text) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      if (button) {
+        setButtonLabel(button, "已复制");
+        setTimeout(() => setButtonLabel(button, originalLabel), 1400);
+      }
+    } catch (error) {
+      if (button) {
+        setButtonLabel(button, "复制失败");
+        setTimeout(() => setButtonLabel(button, originalLabel), 1400);
+      }
+    }
+  }
+
+  function setButtonLabel(button, label) {
+    const text = button?.querySelector("span");
+    if (text) {
+      text.textContent = label;
+    }
+  }
+
   async function openShareModal(configOverride = null) {
     const modal = element("shareModal");
     const canvas = element("shareCanvas");
@@ -1123,7 +1225,7 @@
     y += 118;
     ctx.fillStyle = config.theme;
     ctx.font = posterFont(24, 800);
-    ctx.fillText("重点快讯", x, y);
+    ctx.fillText("外发快讯", x, y);
     y += 20;
     const items = brief.items || [];
     if (!items.length) {
@@ -1531,6 +1633,14 @@
     return Number(value).toLocaleString("zh-CN", { maximumFractionDigits: digits });
   }
 
+  function truncateText(value, maxLength) {
+    const text = String(value || "");
+    if (text.length <= maxLength) {
+      return text;
+    }
+    return text.slice(0, Math.max(0, maxLength - 1)) + "…";
+  }
+
   function round(value, digits = 2) {
     const number = Number(value);
     if (!Number.isFinite(number)) {
@@ -1560,6 +1670,71 @@
 
   function getBriefItemText(item) {
     return item.flashText || item.fact || item.reason || item.title || "--";
+  }
+
+  function formatBriefForwardText(brief, options = {}) {
+    const maxItems = options.maxItems || 6;
+    const includeLinks = options.includeLinks !== false;
+    const compact = Boolean(options.compact);
+    const items = (brief.items || []).slice(0, maxItems);
+    const lines = [
+      `【华泰互联网资讯快报】${formatForwardDate(brief.runAt)}`,
+      ""
+    ];
+    if (!compact && brief.summary) {
+      lines.push(`本轮要点：${cleanForwardSentence(brief.summary)}`, "");
+    }
+    items.forEach((item, index) => {
+      const title = cleanForwardSentence(getBriefItemTitle(item));
+      const text = cleanForwardSentence(getBriefItemText(item));
+      const source = item.sourceName ? `来源：${item.sourceName}` : "";
+      const score = Number.isFinite(Number(item.score)) ? `重要度：${formatNumber(item.score, 0)}` : "";
+      const meta = [source, score].filter(Boolean).join("；");
+      lines.push(`${index + 1}. ${title}`);
+      lines.push(meta ? `${text}（${meta}）` : text);
+      if (includeLinks && item.url) {
+        lines.push(`原文：${item.url}`);
+      }
+      if (!compact) {
+        lines.push("");
+      }
+    });
+    if (!items.length) {
+      lines.push("本轮暂无入选快讯。", "");
+    }
+    if (!compact) {
+      lines.push("说明：以上信息来自公开新闻源，供研究跟踪使用。");
+    }
+    return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  }
+
+  function formatBriefSmsText(brief) {
+    const items = (brief.items || []).slice(0, 3);
+    const parts = [`【华泰互联网】${formatForwardDate(brief.runAt)}资讯快报`];
+    items.forEach((item, index) => {
+      const title = cleanForwardSentence(getBriefItemTitle(item));
+      const text = cleanForwardSentence(item.smsText || getBriefItemText(item));
+      parts.push(`${index + 1}. ${title}：${text}`);
+    });
+    return truncateText(parts.join("；"), 480);
+  }
+
+  function cleanForwardSentence(value) {
+    return String(value || "")
+      .replace(/\s+/g, " ")
+      .replace(/[；;]\s*$/, "")
+      .trim();
+  }
+
+  function formatForwardDate(value) {
+    if (!value) {
+      return formatToday();
+    }
+    const text = String(value);
+    if (text.length >= 16) {
+      return `${text.slice(5, 7)}月${text.slice(8, 10)}日 ${text.slice(11, 16)}`;
+    }
+    return text;
   }
 
   function focusRequestedBrief() {
