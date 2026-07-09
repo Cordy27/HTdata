@@ -1682,7 +1682,7 @@
       ""
     ];
     if (!compact && brief.summary) {
-      lines.push(`本轮要点：${cleanForwardSentence(brief.summary)}`, "");
+      lines.push(`要点：${cleanBriefLead(brief.summary)}`, "");
     }
     items.forEach((item, index) => {
       const title = cleanForwardSentence(getBriefItemTitle(item));
@@ -1723,6 +1723,14 @@
     return String(value || "")
       .replace(/\s+/g, " ")
       .replace(/[；;]\s*$/, "")
+      .trim();
+  }
+
+  function cleanBriefLead(value) {
+    return cleanForwardSentence(value)
+      .replace(/^本轮(增量新闻|新增信息|信息)?(主要)?/, "")
+      .replace(/^本次(增量新闻|新增信息|信息)?(主要)?/, "")
+      .replace(/^，/, "")
       .trim();
   }
 
