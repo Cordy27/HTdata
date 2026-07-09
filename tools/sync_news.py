@@ -38,12 +38,13 @@ if hasattr(sys.stderr, "reconfigure"):
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Sync industry news into data/news-data.js")
+    parser = argparse.ArgumentParser(description="Sync industry news into CloudBase or local cache")
     parser.add_argument("--config", default=str(CONFIG_FILE))
     parser.add_argument("--cache", default=str(CACHE_FILE))
     parser.add_argument("--output", default=str(OUTPUT_JS))
     parser.add_argument("--check-cloudbase-schema", action="store_true")
     parser.add_argument("--export-only", action="store_true", help="Only export existing CloudBase/cache news data without fetching sources or calling AI.")
+    parser.add_argument("--write-static-news", action="store_true", help="Also write data/news-data.js for local fallback use.")
     parser.add_argument("--lookback-days", type=int, help="Override the display/fetch lookback window for this run.")
     parser.add_argument("--clear-briefs", action="store_true", help="Delete existing news briefs before generating a new one.")
     parser.add_argument("--force-brief-from-recent", action="store_true", help="Generate a brief from recent items even when there are no newly discovered item ids.")
@@ -70,6 +71,7 @@ def main() -> int:
 
     cache = load_cache(cache_path, issues)
     cloudbase = CloudBaseClient.from_env(settings, issues, required=require_cloudbase)
+    write_static_news = args.write_static_news or not cloudbase
     if args.check_cloudbase_schema:
         if not cloudbase:
             raise RuntimeError("CloudBase 未配置，无法检查新闻表结构。")
@@ -101,12 +103,12 @@ def main() -> int:
             briefs=briefs,
             storage_backend="CloudBase" if cloudbase else "local-cache",
         )
-        write_outputs(output_path, cache_path, payload, merged_items, briefs)
+        write_outputs(output_path, cache_path, payload, merged_items, briefs, write_static_news=write_static_news)
         write_log(LOG_FILE, now, issues, 0, len(merged_items), 0)
-        print(json.dumps({
+        result = {
             "ok": True,
             "mode": "export-only",
-            "output": str(output_path),
+            "output": str(output_path) if write_static_news else None,
             "cache": str(cache_path),
             "fetched": 0,
             "newItems": 0,
@@ -114,7 +116,8 @@ def main() -> int:
             "briefs": len(briefs),
             "storage": "CloudBase" if cloudbase else "local-cache",
             "issueCount": len(issues),
-        }, ensure_ascii=False, indent=2))
+        }
+        print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
 
     fetched_items: list[dict[str, Any]] = []
@@ -165,12 +168,12 @@ def main() -> int:
         storage_backend="CloudBase" if cloudbase else "local-cache",
     )
 
-    write_outputs(output_path, cache_path, payload, merged_items, briefs)
+    write_outputs(output_path, cache_path, payload, merged_items, briefs, write_static_news=write_static_news)
     write_log(LOG_FILE, now, issues, len(fetched_items), len(merged_items), len(new_items))
 
-    print(json.dumps({
+    result = {
         "ok": True,
-        "output": str(output_path),
+        "output": str(output_path) if write_static_news else None,
         "cache": str(cache_path),
         "fetched": len(fetched_items),
         "newItems": len(new_items),
@@ -178,7 +181,8 @@ def main() -> int:
         "briefs": len(briefs),
         "storage": "CloudBase" if cloudbase else "local-cache",
         "issueCount": len(issues),
-    }, ensure_ascii=False, indent=2))
+    }
+    print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -630,13 +634,17 @@ def write_outputs(
     payload: dict[str, Any],
     items: list[dict[str, Any]],
     briefs: list[dict[str, Any]],
+    *,
+    write_static_news: bool,
 ) -> None:
-    output_path.parent.mkdir(parents=True, exist_ok=True)
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     cache_path.write_text(
         json.dumps({"items": items, "briefs": briefs}, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+    if not write_static_news:
+        return
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(
         "window.HT_NEWS_DATA = "
         + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
