@@ -20,11 +20,7 @@ from xml.etree import ElementTree
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 CONFIG_FILE = ROOT_DIR / "config" / "news-sources.json"
-DATA_DIR = ROOT_DIR / "data"
-CACHE_FILE = DATA_DIR / "news-cache.json"
-OUTPUT_JS = DATA_DIR / "news-data.js"
 LOG_FILE = ROOT_DIR / "logs" / "news-sync.log"
-TRENDRADAR_URL = "https://github.com/sansan0/TrendRadar"
 SHANGHAI_TZ = timezone(timedelta(hours=8))
 NEWS_ITEMS_TABLE = "ht_news_items"
 NEWS_BRIEFS_TABLE = "ht_news_briefs"
@@ -38,21 +34,15 @@ if hasattr(sys.stderr, "reconfigure"):
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Sync industry news into CloudBase or local cache")
+    parser = argparse.ArgumentParser(description="Sync industry news into CloudBase")
     parser.add_argument("--config", default=str(CONFIG_FILE))
-    parser.add_argument("--cache", default=str(CACHE_FILE))
-    parser.add_argument("--output", default=str(OUTPUT_JS))
     parser.add_argument("--check-cloudbase-schema", action="store_true")
-    parser.add_argument("--export-only", action="store_true", help="Only export existing CloudBase/cache news data without fetching sources or calling AI.")
-    parser.add_argument("--write-static-news", action="store_true", help="Also write data/news-data.js for local fallback use.")
     parser.add_argument("--lookback-days", type=int, help="Override the display/fetch lookback window for this run.")
     parser.add_argument("--clear-briefs", action="store_true", help="Delete existing news briefs before generating a new one.")
     parser.add_argument("--force-brief-from-recent", action="store_true", help="Generate a brief from recent items even when there are no newly discovered item ids.")
     args = parser.parse_args()
 
     config_path = Path(args.config)
-    cache_path = Path(args.cache)
-    output_path = Path(args.output)
 
     issues: list[str] = []
     load_env_file(ROOT_DIR / ".env")
@@ -66,59 +56,19 @@ def main() -> int:
             current_age = int(feed.get("maxAgeDays", lookback_days) or lookback_days)
             feed["maxAgeDays"] = min(current_age, lookback_days)
     max_items = int(settings.get("maxItems", 180))
-    require_cloudbase = is_cloudbase_required()
     require_ai = is_ai_required()
 
-    cache = load_cache(cache_path, issues)
-    cloudbase = CloudBaseClient.from_env(settings, issues, required=require_cloudbase)
-    write_static_news = args.write_static_news or not cloudbase
+    cloudbase = CloudBaseClient.from_env(settings, issues, required=True)
     if args.check_cloudbase_schema:
-        if not cloudbase:
-            raise RuntimeError("CloudBase 未配置，无法检查新闻表结构。")
         check_cloudbase_schema(cloudbase)
         print(json.dumps({"ok": True, "checked": [NEWS_ITEMS_TABLE, NEWS_BRIEFS_TABLE, NEWS_RUNS_TABLE]}, ensure_ascii=False, indent=2))
         return 0
 
     if args.clear_briefs:
-        if cloudbase:
-            clear_cloud_briefs(cloudbase)
-        cache["briefs"] = []
+        clear_cloud_briefs(cloudbase)
 
-    cloud_items = load_cloud_items(cloudbase, max_items * 3) if cloudbase else []
-    cloud_briefs = load_cloud_briefs(cloudbase, 3) if cloudbase else []
-
-    if args.export_only:
-        source_items = cloud_items if cloudbase else cache.get("items", [])
-        source_briefs = cloud_briefs if cloudbase else cache.get("briefs", [])
-        merged_items = sort_items(filter_recent_items(source_items, now, lookback_days))[:max_items]
-        briefs = sort_briefs([normalize_brief(brief) for brief in source_briefs if isinstance(brief, dict)])[-3:]
-        payload = build_payload(
-            config,
-            merged_items,
-            [],
-            len(issues),
-            now,
-            lookback_days,
-            new_count=0,
-            briefs=briefs,
-            storage_backend="CloudBase" if cloudbase else "local-cache",
-        )
-        write_outputs(output_path, cache_path, payload, merged_items, briefs, write_static_news=write_static_news)
-        write_log(LOG_FILE, now, issues, 0, len(merged_items), 0)
-        result = {
-            "ok": True,
-            "mode": "export-only",
-            "output": str(output_path) if write_static_news else None,
-            "cache": str(cache_path),
-            "fetched": 0,
-            "newItems": 0,
-            "items": len(merged_items),
-            "briefs": len(briefs),
-            "storage": "CloudBase" if cloudbase else "local-cache",
-            "issueCount": len(issues),
-        }
-        print(json.dumps(result, ensure_ascii=False, indent=2))
-        return 0
+    cloud_items = load_cloud_items(cloudbase, max_items * 3)
+    cloud_briefs = load_cloud_briefs(cloudbase, 3)
 
     fetched_items: list[dict[str, Any]] = []
     fetched_items.extend(fetch_hotlists(config, now, issues))
@@ -127,8 +77,8 @@ def main() -> int:
     fetched_existing_items = load_cloud_items_by_ids(
         cloudbase,
         [str(item.get("id")) for item in fetched_items if item.get("id")],
-    ) if cloudbase else []
-    prior_items = merge_prior_items(cloud_items, fetched_existing_items) if cloudbase else cache.get("items", [])
+    )
+    prior_items = merge_prior_items(cloud_items, fetched_existing_items)
     prior_ids = {str(item.get("id")) for item in prior_items if item.get("id")}
     prior_latest = latest_item_time(prior_items)
     preserve_existing_ids = {str(item.get("id")) for item in fetched_existing_items if item.get("id")}
@@ -148,38 +98,22 @@ def main() -> int:
     if brief:
         apply_brief_scores(merged_items, brief)
     merged_items = sort_items(merged_items)[:max_items]
-    briefs = merge_briefs(cloud_briefs if cloudbase else cache.get("briefs", []), brief)
+    briefs = merge_briefs(cloud_briefs, brief)
 
-    if cloudbase:
-        persist_cloudbase(cloudbase, merged_items, brief, now, len(fetched_items), len(new_items), issues)
-        refreshed_briefs = load_cloud_briefs(cloudbase, 3)
-        if refreshed_briefs:
-            briefs = refreshed_briefs
+    persist_cloudbase(cloudbase, merged_items, brief, now, len(fetched_items), len(new_items), issues)
+    refreshed_briefs = load_cloud_briefs(cloudbase, 3)
+    if refreshed_briefs:
+        briefs = refreshed_briefs
 
-    payload = build_payload(
-        config,
-        merged_items,
-        fetched_items,
-        len(issues),
-        now,
-        lookback_days,
-        new_count=len(new_items),
-        briefs=briefs,
-        storage_backend="CloudBase" if cloudbase else "local-cache",
-    )
-
-    write_outputs(output_path, cache_path, payload, merged_items, briefs, write_static_news=write_static_news)
     write_log(LOG_FILE, now, issues, len(fetched_items), len(merged_items), len(new_items))
 
     result = {
         "ok": True,
-        "output": str(output_path) if write_static_news else None,
-        "cache": str(cache_path),
         "fetched": len(fetched_items),
         "newItems": len(new_items),
         "items": len(merged_items),
         "briefs": len(briefs),
-        "storage": "CloudBase" if cloudbase else "local-cache",
+        "storage": "CloudBase",
         "issueCount": len(issues),
     }
     print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -207,27 +141,9 @@ def load_env_file(path: Path) -> None:
         return
 
 
-def is_cloudbase_required() -> bool:
-    value = clean_text(os.environ.get("CLOUDBASE_REQUIRED")).casefold()
-    return value in {"1", "true", "yes", "required"} or clean_text(os.environ.get("GITHUB_ACTIONS")).casefold() == "true"
-
-
 def is_ai_required() -> bool:
     value = clean_text(os.environ.get("AI_REQUIRED")).casefold()
     return value in {"1", "true", "yes", "required"} or clean_text(os.environ.get("GITHUB_ACTIONS")).casefold() == "true"
-
-
-def load_cache(path: Path, warnings: list[str]) -> dict[str, Any]:
-    if not path.exists():
-        return {"items": [], "briefs": []}
-    try:
-        payload = read_json(path)
-        if isinstance(payload, dict) and isinstance(payload.get("items"), list):
-            payload.setdefault("briefs", [])
-            return payload
-    except Exception as exc:
-        warnings.append(f"新闻缓存读取失败：{exc}")
-    return {"items": [], "briefs": []}
 
 
 def fetch_hotlists(config: dict[str, Any], now: datetime, warnings: list[str]) -> list[dict[str, Any]]:
@@ -558,60 +474,6 @@ def filter_recent_items(items: list[dict[str, Any]], now: datetime, lookback_day
     return recent
 
 
-def build_payload(
-    config: dict[str, Any],
-    items: list[dict[str, Any]],
-    fetched_items: list[dict[str, Any]],
-    issue_count: int,
-    now: datetime,
-    lookback_days: int,
-    *,
-    new_count: int,
-    briefs: list[dict[str, Any]],
-    storage_backend: str,
-) -> dict[str, Any]:
-    groups = []
-    for group in config.get("keywordGroups", []):
-        tag = str(group.get("tag") or "")
-        count = sum(1 for item in items if tag in item.get("tags", []))
-        groups.append({"tag": tag, "count": count})
-    if any("财经要闻" in item.get("tags", []) for item in items):
-        groups.append({"tag": "财经要闻", "count": sum(1 for item in items if "财经要闻" in item.get("tags", []))})
-
-    source_counts: dict[str, dict[str, Any]] = {}
-    for item in items:
-        key = str(item.get("sourceId") or item.get("sourceName") or "")
-        if not key:
-            continue
-        source_counts.setdefault(key, {
-            "sourceId": item.get("sourceId", ""),
-            "sourceName": item.get("sourceName", ""),
-            "sourceType": item.get("sourceType", ""),
-            "count": 0,
-        })
-        source_counts[key]["count"] += 1
-
-    return {
-        "meta": {
-            "version": f"NewsSync-{now.strftime('%Y%m%d-%H%M%S')}",
-            "lastUpdated": format_dt(now),
-            "lookbackDays": lookback_days,
-            "itemCount": len(items),
-            "fetchedCount": len(fetched_items),
-            "newCount": new_count,
-            "issueCount": issue_count,
-            "briefCount": len(briefs),
-            "storage": storage_backend,
-            "sourceProject": "TrendRadar / newsnow compatible sources",
-            "sourceProjectUrl": TRENDRADAR_URL,
-        },
-        "groups": [group for group in groups if group["count"] > 0],
-        "sources": sorted(source_counts.values(), key=lambda item: (-item["count"], item["sourceName"])),
-        "briefs": briefs,
-        "items": items,
-    }
-
-
 def write_log(path: Path, now: datetime, issues: list[str], fetched_count: int, item_count: int, new_count: int) -> None:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -626,32 +488,6 @@ def write_log(path: Path, now: datetime, issues: list[str], fetched_count: int, 
             file.write(json.dumps(record, ensure_ascii=False) + "\n")
     except OSError:
         return
-
-
-def write_outputs(
-    output_path: Path,
-    cache_path: Path,
-    payload: dict[str, Any],
-    items: list[dict[str, Any]],
-    briefs: list[dict[str, Any]],
-    *,
-    write_static_news: bool,
-) -> None:
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
-    cache_path.write_text(
-        json.dumps({"items": items, "briefs": briefs}, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    if not write_static_news:
-        return
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(
-        "window.HT_NEWS_DATA = "
-        + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
-        + ";\n",
-        encoding="utf-8",
-    )
-
 
 class CloudBaseClient:
     def __init__(self, env_id: str, token: str, timeout: int) -> None:

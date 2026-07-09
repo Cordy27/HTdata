@@ -12,18 +12,10 @@
   }
 
   async function fetchNewsData() {
-    if (window.cloudbase && window.HT_CLOUDBASE_CONFIG) {
-      try {
-        return await fetchCloudbaseNewsData();
-      } catch (error) {
-        console.warn("CloudBase 新闻数据读取失败", error);
-      }
+    if (!window.cloudbase || !window.HT_CLOUDBASE_CONFIG) {
+      throw new Error("未读取到 CloudBase 新闻数据库配置。");
     }
-    if (!window.HT_NEWS_DATA) {
-      return emptyNewsData();
-    }
-
-    return clone(window.HT_NEWS_DATA);
+    return fetchCloudbaseNewsData();
   }
 
   async function fetchCloudbaseNewsData() {
@@ -172,22 +164,6 @@
       return "";
     }
     return String(value).replace("T", " ").replace(/\.\d+Z?$/, "").replace(/Z$/, "");
-  }
-
-  function emptyNewsData() {
-    return {
-      meta: {
-        lastUpdated: "",
-        itemCount: 0,
-        fetchedCount: 0,
-        lookbackDays: 7,
-        issueCount: 0
-      },
-      groups: [],
-      sources: [],
-      briefs: [],
-      items: []
-    };
   }
 
   async function triggerSync() {
