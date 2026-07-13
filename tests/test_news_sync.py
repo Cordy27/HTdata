@@ -6,7 +6,7 @@ import sys
 import unittest
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 
 TOOLS_DIR = Path(__file__).resolve().parents[1] / "tools"
@@ -227,6 +227,44 @@ class NewsIntegrationBoundaryTests(unittest.TestCase):
         self.assertEqual(result["items"], 1)
         self.assertEqual(result["storage"], "CloudBase")
         persist_mock.assert_called_once()
+
+    def test_storage_retention_is_independent_from_frontend_display_limit(self) -> None:
+        fetched_items = [
+            {
+                "id": f"item-{index}",
+                "title": f"示例新闻 {index}",
+                "url": f"https://example.com/{index}",
+                "tags": ["AI"],
+                "matchedTerms": ["AI"],
+                "latestSeenAt": f"2026-07-13 12:0{index}:00",
+                "collectedAt": f"2026-07-13 12:0{index}:00",
+                "observations": 1,
+            }
+            for index in range(2)
+        ]
+        with (
+            patch("news_sync.service.load_env_file"),
+            patch("news_sync.service.read_json", return_value={"settings": {
+                "lookbackDays": 7,
+                "maxItems": 1,
+                "storageMaxItems": 3,
+            }}),
+            patch("news_sync.service.is_ai_required", return_value=False),
+            patch("news_sync.service.CloudBaseClient.from_env", return_value=object()),
+            patch("news_sync.service.load_cloud_items", return_value=[]) as load_items_mock,
+            patch("news_sync.service.load_cloud_briefs", side_effect=[[], []]),
+            patch("news_sync.service.fetch_hotlists", return_value=fetched_items),
+            patch("news_sync.service.fetch_rss", return_value=[]),
+            patch("news_sync.service.load_cloud_items_by_ids", return_value=[]),
+            patch("news_sync.service.build_ai_brief", return_value=None),
+            patch("news_sync.service.persist_cloudbase", return_value=[]) as persist_mock,
+            patch("news_sync.service.write_log"),
+        ):
+            result = run_sync(SyncOptions(config_path=Path("unused.json")))
+
+        load_items_mock.assert_called_once_with(ANY, 9)
+        self.assertEqual(len(persist_mock.call_args.args[1]), 2)
+        self.assertEqual(result["items"], 2)
 
     def test_service_does_not_rebrief_an_existing_item(self) -> None:
         existing_item = {

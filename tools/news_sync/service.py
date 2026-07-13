@@ -65,6 +65,7 @@ def run_sync(options: SyncOptions) -> dict[str, Any]:
             current_age = int(feed.get("maxAgeDays", lookback_days) or lookback_days)
             feed["maxAgeDays"] = min(current_age, lookback_days)
     max_items = int(settings.get("maxItems", 180))
+    storage_max_items = max(max_items, int(settings.get("storageMaxItems", max_items)))
     require_ai = is_ai_required()
 
     cloudbase = CloudBaseClient.from_env(settings)
@@ -78,7 +79,7 @@ def run_sync(options: SyncOptions) -> dict[str, Any]:
     if options.clear_briefs:
         clear_cloud_briefs(cloudbase)
 
-    cloud_items = load_cloud_items(cloudbase, max_items * 3)
+    cloud_items = load_cloud_items(cloudbase, storage_max_items * 3)
     cloud_briefs = load_cloud_briefs(cloudbase, 3)
     wechat_enabled = isinstance(config.get("wechat"), dict) and config["wechat"].get("enabled", False)
     wechat_states = load_wechat_account_states(cloudbase) if wechat_enabled else []
@@ -124,7 +125,7 @@ def run_sync(options: SyncOptions) -> dict[str, Any]:
     )
     if brief:
         apply_brief_scores(merged_items, brief)
-    merged_items = sort_items(merged_items)[:max_items]
+    merged_items = sort_items(merged_items)[:storage_max_items]
     briefs = merge_briefs(cloud_briefs, brief)
 
     new_wechat_items = sum(1 for item in new_items if item.get("sourceType") == "公众号")

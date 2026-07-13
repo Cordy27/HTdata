@@ -3,6 +3,7 @@
     "apiUrl": "https://newsnow.busiyi.world/api/s",
     "lookbackDays": 7,
     "maxItems": 180,
+    "storageMaxItems": 1000,
     "aiMaxCandidates": 60,
     "aiMaxBriefItems": 5,
     "aiTimeoutSeconds": 120,
