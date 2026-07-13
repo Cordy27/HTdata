@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import sys
 import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+from urllib.error import HTTPError, URLError
 
 
 TOOLS_DIR = Path(__file__).resolve().parents[1] / "tools"
@@ -61,6 +63,103 @@ class WechatAdapterTests(unittest.TestCase):
         self.assertEqual(request.get_header("Authorization"), "Bearer secret")
         self.assertIn("/api/internal/v1/collector/accounts/MzA%3D/articles", request.full_url)
         self.assertIn("begin=20&size=20", request.full_url)
+
+    @patch("news_sync.wechat.time.sleep")
+    @patch("news_sync.wechat.urlopen")
+    def test_article_request_retries_503_then_succeeds(self, urlopen_mock, sleep_mock) -> None:
+        response = MagicMock()
+        response.read.return_value = b'{"ok": true, "articles": []}'
+        response.__enter__.return_value = response
+        urlopen_mock.side_effect = [
+            HTTPError("https://collector.example.com", 503, "Unavailable", {}, None),
+            response,
+        ]
+
+        payload = request_account_articles("https://collector.example.com", "secret", "fake-1", 20, 30)
+
+        self.assertTrue(payload["ok"])
+        self.assertEqual(urlopen_mock.call_count, 2)
+        sleep_mock.assert_called_once_with(1)
+
+    @patch("news_sync.wechat.time.sleep")
+    @patch("news_sync.wechat.urlopen")
+    def test_article_request_retries_timeout_and_url_error_then_succeeds(self, urlopen_mock, sleep_mock) -> None:
+        response = MagicMock()
+        response.read.return_value = b'{"ok": true, "articles": []}'
+        response.__enter__.return_value = response
+        urlopen_mock.side_effect = [
+            socket.timeout("cold start"),
+            URLError("connection reset"),
+            response,
+        ]
+
+        payload = request_account_articles("https://collector.example.com", "secret", "fake-1", 20, 30)
+
+        self.assertTrue(payload["ok"])
+        self.assertEqual([call.args[0] for call in sleep_mock.call_args_list], [1, 2])
+
+    @patch("news_sync.wechat.time.sleep")
+    @patch("news_sync.wechat.urlopen")
+    def test_article_request_retries_connection_reset_while_reading(self, urlopen_mock, sleep_mock) -> None:
+        broken_response = MagicMock()
+        broken_response.read.side_effect = ConnectionResetError("reset while reading")
+        broken_response.__enter__.return_value = broken_response
+        good_response = MagicMock()
+        good_response.read.return_value = b'{"ok": true, "articles": []}'
+        good_response.__enter__.return_value = good_response
+        urlopen_mock.side_effect = [broken_response, good_response]
+
+        payload = request_account_articles("https://collector.example.com", "secret", "fake-1", 20, 30)
+
+        self.assertTrue(payload["ok"])
+        self.assertEqual(urlopen_mock.call_count, 2)
+        sleep_mock.assert_called_once_with(1)
+
+    @patch("news_sync.wechat.time.sleep")
+    @patch("news_sync.wechat.urlopen")
+    def test_article_request_does_not_retry_auth_errors(self, urlopen_mock, sleep_mock) -> None:
+        for code in (401, 403):
+            with self.subTest(code=code):
+                urlopen_mock.reset_mock()
+                sleep_mock.reset_mock()
+                error = HTTPError("https://collector.example.com", code, "Denied", {}, None)
+                error.read = MagicMock(return_value=b'{"error":{"code":"DENIED","message":"no"}}')
+                urlopen_mock.side_effect = error
+
+                with self.assertRaisesRegex(RuntimeError, f"HTTP {code}: DENIED: no"):
+                    request_account_articles("https://collector.example.com", "secret", "fake-1", 20, 30)
+
+                self.assertEqual(urlopen_mock.call_count, 1)
+                sleep_mock.assert_not_called()
+
+    @patch("news_sync.wechat.time.sleep")
+    @patch("news_sync.wechat.urlopen")
+    def test_article_request_does_not_retry_http_500(self, urlopen_mock, sleep_mock) -> None:
+        error = HTTPError("https://collector.example.com", 500, "Error", {}, None)
+        error.read = MagicMock(return_value=b"server error")
+        urlopen_mock.side_effect = error
+
+        with self.assertRaisesRegex(RuntimeError, "HTTP 500: server error"):
+            request_account_articles("https://collector.example.com", "secret", "fake-1", 20, 30)
+
+        self.assertEqual(urlopen_mock.call_count, 1)
+        sleep_mock.assert_not_called()
+
+    @patch("news_sync.wechat.time.sleep")
+    @patch("news_sync.wechat.urlopen")
+    def test_article_request_exhausts_504_with_expected_backoff(self, urlopen_mock, sleep_mock) -> None:
+        errors = []
+        for _ in range(3):
+            error = HTTPError("https://collector.example.com", 504, "Timeout", {}, None)
+            error.read = MagicMock(return_value=b"gateway timeout")
+            errors.append(error)
+        urlopen_mock.side_effect = errors
+
+        with self.assertRaisesRegex(RuntimeError, "HTTP 504: gateway timeout"):
+            request_account_articles("https://collector.example.com", "secret", "fake-1", 20, 30)
+
+        self.assertEqual(urlopen_mock.call_count, 3)
+        self.assertEqual([call.args[0] for call in sleep_mock.call_args_list], [1, 2])
 
     @patch("news_sync.wechat.request_account_articles")
     def test_paginates_until_cursor_and_keeps_newest_cursor(self, request_mock) -> None:

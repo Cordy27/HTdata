@@ -169,8 +169,29 @@ class NewsIntegrationBoundaryTests(unittest.TestCase):
         self.assertIn("WECHAT_COLLECTOR_API_KEY: ${{ secrets.WECHAT_COLLECTOR_API_KEY }}", workflow)
         self.assertNotIn("WECHAT_AUTH_KEY", workflow)
         self.assertNotIn("auth-key", workflow.casefold())
+
+    def test_force_brief_input_independently_triggers_news_steps(self) -> None:
+        workflow = (Path(__file__).resolve().parents[1] / ".github" / "workflows" / "pages.yml").read_text(encoding="utf-8")
+        trigger_condition = "inputs.refresh_news == 'true' || inputs.force_news_brief == 'true'"
+        self.assertEqual(workflow.count(trigger_condition), 2)
+        self.assertIn("python tools/sync_news.py --force-brief-from-recent", workflow)
         self.assertIn("force_news_brief:", workflow)
         self.assertIn("python tools/sync_news.py --force-brief-from-recent", workflow)
+
+    def test_workflow_warms_scale_to_zero_collector_immediately_before_sync(self) -> None:
+        workflow = (Path(__file__).resolve().parents[1] / ".github" / "workflows" / "pages.yml").read_text(encoding="utf-8")
+        warmup = workflow.index("- name: Warm up WeChat collector")
+        generate = workflow.index("- name: Generate news data")
+        between = workflow[warmup:generate]
+
+        self.assertLess(warmup, generate)
+        self.assertIn("python tools/warm_wechat_collector.py", between)
+        self.assertIn('--warmup-id "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"', between)
+        self.assertIn("--budget-seconds 120", between)
+        self.assertIn("continue-on-error: true", between)
+        self.assertIn("WECHAT_EXPORTER_BASE_URL: ${{ secrets.WECHAT_EXPORTER_BASE_URL }}", between)
+        self.assertNotIn("WECHAT_COLLECTOR_API_KEY", between)
+        self.assertNotIn("force_news_brief == 'true'", between)
 
     def test_wechat_migration_is_idempotency_guarded(self) -> None:
         migration = (Path(__file__).resolve().parents[1] / "schema" / "cloudbase-news-wechat-migration.sql").read_text(encoding="utf-8")
@@ -295,6 +316,47 @@ class NewsIntegrationBoundaryTests(unittest.TestCase):
 
         self.assertEqual(result["newItems"], 0)
         self.assertEqual(brief_mock.call_args.args[1], [])
+
+    def test_force_brief_uses_only_existing_cloud_items(self) -> None:
+        existing_item = {
+            "id": "a" * 20,
+            "title": "已入库 AI 新闻",
+            "url": "https://example.com/existing",
+            "tags": ["AI"],
+            "matchedTerms": ["AI"],
+            "publishedAt": "2026-07-13 11:00:00",
+            "latestSeenAt": "2026-07-13 11:00:00",
+            "collectedAt": "2026-07-13 11:00:00",
+            "observations": 1,
+        }
+        with (
+            patch("news_sync.service.load_env_file"),
+            patch("news_sync.service.read_json", return_value={"settings": {"lookbackDays": 7, "maxItems": 180}}),
+            patch("news_sync.service.is_ai_required", return_value=True),
+            patch("news_sync.service.CloudBaseClient.from_env", return_value=object()),
+            patch("news_sync.service.load_cloud_items", return_value=[existing_item]),
+            patch("news_sync.service.load_cloud_briefs", side_effect=[[], []]),
+            patch("news_sync.service.load_wechat_account_states") as load_states_mock,
+            patch("news_sync.service.fetch_hotlists") as hotlists_mock,
+            patch("news_sync.service.fetch_rss") as rss_mock,
+            patch("news_sync.service.fetch_wechat") as wechat_mock,
+            patch("news_sync.service.load_cloud_items_by_ids") as load_ids_mock,
+            patch("news_sync.service.build_ai_brief", return_value=None) as brief_mock,
+            patch("news_sync.service.persist_cloudbase", return_value=[]),
+            patch("news_sync.service.write_log"),
+        ):
+            result = run_sync(SyncOptions(
+                config_path=Path("unused.json"),
+                force_brief_from_recent=True,
+            ))
+
+        hotlists_mock.assert_not_called()
+        rss_mock.assert_not_called()
+        wechat_mock.assert_not_called()
+        load_states_mock.assert_not_called()
+        load_ids_mock.assert_not_called()
+        self.assertEqual([item["id"] for item in brief_mock.call_args.args[1]], [existing_item["id"]])
+        self.assertEqual(result["fetched"], 0)
 
     def test_wechat_failure_is_reported_after_other_sources_and_persistence_complete(self) -> None:
         fetched_item = {

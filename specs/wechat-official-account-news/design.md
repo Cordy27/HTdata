@@ -33,12 +33,14 @@ flowchart LR
 - 运行时：项目原生 Node.js 22 + Nuxt/Nitro。
 - 端口：应用读取 CloudRun 注入的 `PORT`；Dockerfile 不依赖固定外部端口。
 - 公网：开启 `WEB`，供人工扫码页面和 GitHub Actions 调用。
-- 建议资源：1 vCPU / 2 GiB，最小实例 1，最大实例 2。
+- 资源：1 vCPU / 2 GiB，最小实例 0，最大实例 2。
 - 服务名：`wechat-article-exporter`。
+
+最小实例为 0 时允许服务在空闲期完全缩容。GitHub Actions 在定时同步或 `refresh_news` 人工刷新时，紧邻真实新闻同步调用带本次运行随机参数的公开 `/api/health`，避免中间缓存绕过实例启动。预热总预算为 120 秒，单次请求最长 30 秒，退避间隔为 2、4、8、15、30 秒；只重试网络/超时和 HTTP 502/503/504，401/403 等确定性错误立即失败。
 
 ### 2.2 会话持久化
 
-原项目的本地文件 KV 和容器内存不能作为 CloudRun 的可靠会话存储。新增 CloudBase 文档数据库会话仓库，使用 `@cloudbase/node-sdk` 和 CloudRun 环境身份访问，避免给应用额外注入数据库管理密钥：
+原项目的本地文件 KV 和容器内存不能作为 CloudRun 的可靠会话存储。新增 CloudBase 文档数据库会话仓库，使用 `@cloudbase/node-sdk` 访问；容器模式的公网请求需要通过仅存在于 CloudRun 环境变量的 `CLOUDBASE_APIKEY` 完成服务端鉴权：
 
 ```text
 wechat_exporter_sessions/{authKey}
@@ -46,6 +48,7 @@ wechat_exporter_sessions/{authKey}
   cookies
   createdAt
   updatedAt
+  expiresAt
   invalidAt?
   invalidReason?
 
@@ -58,8 +61,8 @@ wechat_exporter_state/current-session
 
 - 登录成功时继续生成短期 `auth_key`。
 - 会话 Cookie 和微信 token 写入 `wechat_exporter_sessions`。
-- 当 `COLLECTOR_AUTO_BIND_SESSION=true` 时，登录成功自动把 `wechat_exporter_state/current-session` 指向新会话。
-- 微信上游认证结果是实际有效性的权威来源；遇到认证失效时标记会话无效，不依赖容器本地 TTL 判断。
+- `COLLECTOR_AUTO_BIND_SESSION` 默认关闭；生产显式开启后，新扫码仅在当前指针不存在、当前会话已被标记无效或已超过 4 天 TTL 时接管，健康的 `current-session` 不会被公网扫码覆盖。
+- 会话最长保留 4 天；保存和定时采集读取会有限批次清理过期记录，读取到过期 current 时实际删除记录并清除指针。TTL 内仍以上游微信认证结果为有效性的权威来源，认证失效会立即标记会话无效。
 - 重新扫码仅更新服务端状态；GitHub Secrets 不变化。
 - 无 CloudBase 数据库配置的本地开发环境继续回退到原 Nitro KV。
 
@@ -84,7 +87,7 @@ Authorization: Bearer <WECHAT_COLLECTOR_API_KEY>
 
 ### 2.4 安全要求
 
-- `WECHAT_COLLECTOR_API_KEY` 仅通过 CloudRun 环境变量注入；CloudBase SDK 使用环境身份和 `CLOUDBASE_ENV_ID`。
+- `WECHAT_COLLECTOR_API_KEY` 与 `CLOUDBASE_APIKEY` 仅通过 CloudRun 环境变量注入；后者不得进入仓库、浏览器代码或 GitHub Secrets。
 - Bearer token 使用常量时间比较。
 - 参数限制：`size <= 20`、`begin >= 0`、关键词长度限制。
 - 内部接口错误只返回稳定错误码，不回显 Cookie、token 或完整上游响应。
@@ -184,6 +187,8 @@ CREATE TABLE ht_news_wechat_accounts (
 
 同一进程完成所有来源抓取、合并、入库和一次 AI 快报生成。
 
+`Warm up WeChat collector` 步骤位于数据库结构检查之后、`Generate news data` 之前，并设置 `continue-on-error`：预热失败会在 Actions 中留下失败步骤和日志，但真实同步仍会运行，以便热榜、RSS 和可用数据继续入库。仅执行 `force_news_brief` 时跳过预热，保证 AI 失败恢复只依赖已经入库的数据。文章列表请求本身再提供最多 3 次的短重试（1、2 秒），覆盖预热完成后仍可能出现的瞬时 502/503/504、网络错误和超时；401/403、其他 HTTP 错误、JSON 或业务错误不重试。
+
 数据库保留量使用 `storageMaxItems` 独立控制，前端仍按原有 180 条上限读取。这样首次接入多个公众号时，命中记录不会因展示上限被裁掉后仍推进游标。
 
 ## 4. 错误处理与可观测性
@@ -207,6 +212,8 @@ CREATE TABLE ht_news_wechat_accounts (
 
 - 白名单和缺失 `fakeid` 测试。
 - 公众号分页、游标停止、失败隔离测试。
+- CloudRun 预热顺序、无鉴权健康请求、冷启动退避和 401/403 不重试测试。
+- 文章请求 502/503/504、网络超时有限重试及确定性错误单次失败测试。
 - 标题命中、摘要命中但标题不命中的口径测试。
 - 公众号字段映射与稳定 ID 测试。
 - 游标读写测试。

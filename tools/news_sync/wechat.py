@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import json
 import os
+import socket
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from http.client import IncompleteRead
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
@@ -15,6 +18,10 @@ from .constants import SHANGHAI_TZ
 from .domain import make_item
 from .sources import classify
 from .utils import clean_summary, clean_text, format_dt, parse_datetime
+
+
+RETRYABLE_HTTP_CODES = frozenset({502, 503, 504})
+ARTICLE_RETRY_DELAYS = (1, 2)
 
 
 @dataclass
@@ -192,24 +199,37 @@ def request_account_articles(
             "User-Agent": "Mozilla/5.0 HuataiInternetPortal/1.0",
         },
     )
-    try:
-        with urlopen(request, timeout=timeout) as response:
-            payload = json.loads(response.read().decode("utf-8", errors="replace"))
-    except HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")
+    for attempt in range(len(ARTICLE_RETRY_DELAYS) + 1):
         try:
-            payload = json.loads(body)
-            error = payload.get("error", {}) if isinstance(payload, dict) else {}
-            code = clean_text(error.get("code"))
-            message = clean_text(error.get("message"))
-            detail = ": ".join(part for part in [code, message] if part)
-        except json.JSONDecodeError:
-            detail = body[:300]
-        raise RuntimeError(f"HTTP {exc.code}{': ' + detail if detail else ''}") from exc
-    except URLError as exc:
-        raise RuntimeError(str(exc.reason)) from exc
-    except json.JSONDecodeError as exc:
-        raise RuntimeError("响应不是有效 JSON") from exc
+            with urlopen(request, timeout=timeout) as response:
+                payload = json.loads(response.read().decode("utf-8", errors="replace"))
+            break
+        except HTTPError as exc:
+            if exc.code in RETRYABLE_HTTP_CODES and attempt < len(ARTICLE_RETRY_DELAYS):
+                time.sleep(ARTICLE_RETRY_DELAYS[attempt])
+                continue
+            body = exc.read().decode("utf-8", errors="replace")
+            try:
+                error_payload = json.loads(body)
+                error = error_payload.get("error", {}) if isinstance(error_payload, dict) else {}
+                code = clean_text(error.get("code"))
+                message = clean_text(error.get("message"))
+                detail = ": ".join(part for part in [code, message] if part)
+            except json.JSONDecodeError:
+                detail = body[:300]
+            raise RuntimeError(f"HTTP {exc.code}{': ' + detail if detail else ''}") from exc
+        except URLError as exc:
+            if attempt < len(ARTICLE_RETRY_DELAYS):
+                time.sleep(ARTICLE_RETRY_DELAYS[attempt])
+                continue
+            raise RuntimeError(str(exc.reason)) from exc
+        except (TimeoutError, socket.timeout, OSError, IncompleteRead) as exc:
+            if attempt < len(ARTICLE_RETRY_DELAYS):
+                time.sleep(ARTICLE_RETRY_DELAYS[attempt])
+                continue
+            raise RuntimeError(str(exc) or exc.__class__.__name__) from exc
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("响应不是有效 JSON") from exc
     if not isinstance(payload, dict):
         raise RuntimeError("响应不是 JSON 对象")
     if payload.get("ok") is False:

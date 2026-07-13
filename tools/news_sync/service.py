@@ -40,7 +40,7 @@ from .storage import (
     persist_cloudbase,
 )
 from .utils import format_dt, is_ai_required, load_env_file, read_json
-from .wechat import fetch_wechat
+from .wechat import WechatFetchResult, fetch_wechat
 
 
 @dataclass(frozen=True)
@@ -81,15 +81,24 @@ def run_sync(options: SyncOptions) -> dict[str, Any]:
 
     cloud_items = load_cloud_items(cloudbase, storage_max_items * 3)
     cloud_briefs = load_cloud_briefs(cloudbase, 3)
-    wechat_enabled = isinstance(config.get("wechat"), dict) and config["wechat"].get("enabled", False)
-    wechat_states = load_wechat_account_states(cloudbase) if wechat_enabled else []
-    hotlist_items = fetch_hotlists(config, now, issues)
-    rss_items = fetch_rss(config, now, issues)
-    wechat_result = fetch_wechat(config, now, wechat_states, issues)
+    if options.force_brief_from_recent:
+        hotlist_items = []
+        rss_items = []
+        wechat_result = WechatFetchResult()
+    else:
+        wechat_enabled = isinstance(config.get("wechat"), dict) and config["wechat"].get("enabled", False)
+        wechat_states = load_wechat_account_states(cloudbase) if wechat_enabled else []
+        hotlist_items = fetch_hotlists(config, now, issues)
+        rss_items = fetch_rss(config, now, issues)
+        wechat_result = fetch_wechat(config, now, wechat_states, issues)
     fetched_items = [*hotlist_items, *rss_items, *wechat_result.items]
-    fetched_existing_items = load_cloud_items_by_ids(
-        cloudbase,
-        [str(item.get("id")) for item in fetched_items if item.get("id")],
+    fetched_existing_items = (
+        load_cloud_items_by_ids(
+            cloudbase,
+            [str(item.get("id")) for item in fetched_items if item.get("id")],
+        )
+        if fetched_items
+        else []
     )
     prior_items = merge_prior_items(cloud_items, fetched_existing_items)
     prior_ids = {str(item.get("id")) for item in prior_items if item.get("id")}

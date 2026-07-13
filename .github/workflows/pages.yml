@@ -55,7 +55,7 @@ jobs:
         run: python tools/sync_data.py
 
       - name: Check news database schema
-        if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.refresh_news == 'true') }}
+        if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && (inputs.refresh_news == 'true' || inputs.force_news_brief == 'true')) }}
         env:
           CLOUDBASE_REQUIRED: "1"
           CLOUDBASE_ENV_ID: ${{ secrets.CLOUDBASE_ENV_ID }}
@@ -64,8 +64,19 @@ jobs:
           CLOUDBASE_TOKEN: ${{ secrets.CLOUDBASE_TOKEN }}
         run: python tools/sync_news.py --check-cloudbase-schema
 
-      - name: Generate news data
+      - name: Warm up WeChat collector
         if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.refresh_news == 'true') }}
+        continue-on-error: true
+        env:
+          WECHAT_EXPORTER_BASE_URL: ${{ secrets.WECHAT_EXPORTER_BASE_URL }}
+        run: >-
+          python tools/warm_wechat_collector.py
+          --warmup-id "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          --budget-seconds 120
+          --request-timeout-seconds 30
+
+      - name: Generate news data
+        if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && (inputs.refresh_news == 'true' || inputs.force_news_brief == 'true')) }}
         env:
           CLOUDBASE_REQUIRED: "1"
           AI_REQUIRED: "1"

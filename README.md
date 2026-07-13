@@ -13,6 +13,10 @@
 
 公众号白名单位于 `config/news-sources.json`。确认后的 `fakeid` 和运行游标保存在 CloudBase MySQL 表 `ht_news_wechat_accounts`。微信 Cookie 和 token 仅保存在 CloudBase 服务端会话集合中，不进入本仓库或 GitHub Secrets。
 
+CloudRun 最小实例数为 `0`。定时或人工刷新新闻时，GitHub Actions 会在真实同步前调用公开 `/api/health` 预热服务，最多使用 120 秒冷启动窗口，并仅对网络超时及 HTTP 502/503/504 退避重试。预热失败会保留在 Actions 日志中，但不会阻止真实同步继续处理热榜、RSS 和公众号自身的有限重试。只执行 `force_news_brief` 时直接使用已入库新闻，不依赖采集服务预热。
+
+新闻库使用 `storageMaxItems` 控制数据库保留量，门户页面仍固定读取最新 180 条，避免首次接入多个公众号时因展示上限裁掉已命中的入库记录。
+
 数据库初始化及增量迁移文件：
 
 - `schema/cloudbase-news.sql`
