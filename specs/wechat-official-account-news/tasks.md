@@ -66,7 +66,8 @@
   - 修复发现的问题并重复验证
   - _需求：1-8_
 
-- [ ] 13. 启用 CloudRun scale-to-zero 与冷启动保护
+- [x] 13. 启用 CloudRun scale-to-zero 与冷启动保护
+  - 状态：CloudRun `005` 已切换 100% 流量，`MinNum=0`；GitHub Actions `29279379900` 全链路成功
   - 将最小实例数从 1 调整为 0，保留 1 vCPU / 2 GiB 和最大实例 2
   - 在 GitHub Actions 真实新闻同步前增加 120 秒预算健康预热
   - 给公众号文章请求增加仅针对瞬时错误的有限重试

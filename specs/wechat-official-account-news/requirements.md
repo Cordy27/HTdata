@@ -2,7 +2,7 @@
 
 ## 状态
 
-- 阶段：已完成实现、CloudBase 部署、公众号解析与端到端验收
+- 阶段：已完成实现、CloudBase `005` scale-to-zero 部署、公众号解析、冷启动保护与端到端审计
 - 目标开源项目：`wechat-article/wechat-article-exporter`
 - 当前新闻系统：华泰互联网组数据门户的 CloudBase 新闻库、关键词筛选、AI 重要度评分与增量快报链路
 
