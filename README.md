@@ -2,6 +2,24 @@
 
 网页数据来自 `templates` 文件夹中的固定 Excel 填写模板。
 
+## 新闻与公众号同步
+
+新闻同步入口为 `python tools/sync_news.py`，由 `.github/workflows/pages.yml` 定时调用。热榜、RSS 和微信公众号在同一轮任务中完成标题关键词筛选、CloudBase 入库、AI 评分和增量快报。
+
+公众号采集依赖 CloudBase CloudRun 服务 `wechat-article-exporter`，需要以下 GitHub Secrets：
+
+- `WECHAT_EXPORTER_BASE_URL`
+- `WECHAT_COLLECTOR_API_KEY`
+
+公众号白名单位于 `config/news-sources.json`。确认后的 `fakeid` 和运行游标保存在 CloudBase MySQL 表 `ht_news_wechat_accounts`。微信 Cookie 和 token 仅保存在 CloudBase 服务端会话集合中，不进入本仓库或 GitHub Secrets。
+
+数据库初始化及增量迁移文件：
+
+- `schema/cloudbase-news.sql`
+- `schema/cloudbase-news-wechat-migration.sql`
+
+完整需求、技术方案和执行状态见 `specs/wechat-official-account-news/`。
+
 ## 模板位置
 
 - `templates/AI产品数据填写模板.xlsx`

@@ -11,6 +11,56 @@
       "cls-hot": 8
     }
   },
+  "wechat": {
+    "enabled": true,
+    "pageSize": 20,
+    "maxPagesPerAccount": 1,
+    "timeoutSeconds": 30,
+    "accounts": [
+      {
+        "id": "xin-zhiyuan",
+        "name": "新智元",
+        "fakeid": "MzI3MTA0MTk1MA==",
+        "enabled": true
+      },
+      {
+        "id": "z-finance",
+        "name": "Z Finance",
+        "fakeid": "MzA3NzUxMzM5MQ==",
+        "enabled": true
+      },
+      {
+        "id": "cls-ai-daily",
+        "name": "财联社AI Daily",
+        "fakeid": "Mzg4MjYyMzUyNw==",
+        "enabled": true
+      },
+      {
+        "id": "cls",
+        "name": "财联社",
+        "fakeid": "Mzg5MzEyNzEwNQ==",
+        "enabled": true
+      },
+      {
+        "id": "yun-toutiao",
+        "name": "云头条",
+        "fakeid": "MzI4OTc4MzI5OA==",
+        "enabled": true
+      },
+      {
+        "id": "zhidongxi",
+        "name": "智东西",
+        "fakeid": "MzA4MTQ4NjQzMw==",
+        "enabled": true
+      },
+      {
+        "id": "36kr",
+        "name": "36氪",
+        "fakeid": "MzI2NDk5NzA0Mw==",
+        "enabled": true
+      }
+    ]
+  },
   "keywordGroups": [
     {
       "tag": "AI",
