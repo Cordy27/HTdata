@@ -15,6 +15,14 @@ on:
         options:
           - "false"
           - "true"
+      force_news_brief:
+        description: "从近期已入库新闻强制生成快报（仅用于失败恢复）"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
 
 permissions:
   contents: read
@@ -70,7 +78,13 @@ jobs:
           AI_MODEL: ${{ secrets.AI_MODEL }}
           WECHAT_EXPORTER_BASE_URL: ${{ secrets.WECHAT_EXPORTER_BASE_URL }}
           WECHAT_COLLECTOR_API_KEY: ${{ secrets.WECHAT_COLLECTOR_API_KEY }}
-        run: python tools/sync_news.py
+          FORCE_NEWS_BRIEF: ${{ github.event_name == 'workflow_dispatch' && inputs.force_news_brief || 'false' }}
+        run: |
+          if [ "$FORCE_NEWS_BRIEF" = "true" ]; then
+            python tools/sync_news.py --force-brief-from-recent
+          else
+            python tools/sync_news.py
+          fi
 
       - name: Prepare Pages artifact
         run: |

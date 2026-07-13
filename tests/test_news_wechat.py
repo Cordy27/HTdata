@@ -361,10 +361,18 @@ class WechatDomainTests(unittest.TestCase):
             }],
         }, ensure_ascii=False)
         with patch.dict(os.environ, {"AI_API_KEY": "secret"}, clear=False):
-            brief = build_ai_brief({"settings": {"aiMaxBriefItems": 5}}, [candidate], NOW, None, [], required=True)
+            brief = build_ai_brief(
+                {"settings": {"aiMaxBriefItems": 5, "aiTimeoutSeconds": 135}},
+                [candidate],
+                NOW,
+                None,
+                [],
+                required=True,
+            )
 
         self.assertIsNotNone(brief)
         self.assertEqual(brief["items"][0]["relatedIds"], [candidate["id"], "related-item-id"])
+        self.assertEqual(completion_mock.call_args.kwargs["timeout"], 135)
 
     def test_merge_retains_external_status(self) -> None:
         existing = [{

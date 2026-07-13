@@ -38,6 +38,7 @@ def build_ai_brief(
 
     settings = config.get("settings", {})
     max_candidates = int(settings.get("aiMaxCandidates", 60))
+    ai_timeout = max(15, min(300, int(settings.get("aiTimeoutSeconds", 120))))
     min_brief_items = int(settings.get("aiMinBriefItems", 0))
     max_brief_items = int(settings.get("aiMaxBriefItems", 10))
     min_brief_items = max(0, min(min_brief_items, max_brief_items))
@@ -47,7 +48,7 @@ def build_ai_brief(
     messages = build_brief_messages(candidates, now, prior_latest, min_brief_items, max_brief_items)
 
     try:
-        response = call_chat_completion(endpoint, api_key, model, messages)
+        response = call_chat_completion(endpoint, api_key, model, messages, timeout=ai_timeout)
         parsed = parse_ai_json(response)
         candidate_by_id = {str(item.get("id")): item for item in candidates}
         selected = []
@@ -119,15 +120,22 @@ def build_ai_brief(
         return None
 
 
-def call_chat_completion(endpoint: str, api_key: str, model: str, messages: list[dict[str, str]]) -> str:
+def call_chat_completion(
+    endpoint: str,
+    api_key: str,
+    model: str,
+    messages: list[dict[str, str]],
+    *,
+    timeout: int = 120,
+) -> str:
     try:
-        return call_chat_completion_once(endpoint, api_key, model, messages, use_json_format=True)
+        return call_chat_completion_once(endpoint, api_key, model, messages, use_json_format=True, timeout=timeout)
     except RuntimeError as exc:
         message = str(exc)
         should_retry = any(token in message for token in ["response_format", "json_object", "HTTP 5", "upstream_error"])
         if not should_retry:
             raise
-        return call_chat_completion_once(endpoint, api_key, model, messages, use_json_format=False)
+        return call_chat_completion_once(endpoint, api_key, model, messages, use_json_format=False, timeout=timeout)
 
 
 def call_chat_completion_once(
@@ -137,6 +145,7 @@ def call_chat_completion_once(
     messages: list[dict[str, str]],
     *,
     use_json_format: bool,
+    timeout: int,
 ) -> str:
     body = {
         "model": model,
@@ -156,8 +165,10 @@ def call_chat_completion_once(
         method="POST",
     )
     try:
-        with urlopen(request, timeout=45) as response:
+        with urlopen(request, timeout=timeout) as response:
             payload = json.loads(response.read().decode("utf-8", errors="replace"))
+    except TimeoutError as exc:
+        raise RuntimeError(f"AI API 请求超时（{timeout} 秒）") from exc
     except HTTPError as exc:
         text = exc.read().decode("utf-8", errors="replace")
         raise RuntimeError(f"AI API HTTP {exc.code}: {text[:300]}") from exc

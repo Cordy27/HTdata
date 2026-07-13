@@ -5,6 +5,7 @@
     "maxItems": 180,
     "aiMaxCandidates": 60,
     "aiMaxBriefItems": 5,
+    "aiTimeoutSeconds": 120,
     "timeoutSeconds": 12,
     "includeTopRanks": {
       "wallstreetcn-hot": 8,

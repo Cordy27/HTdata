@@ -169,6 +169,8 @@ class NewsIntegrationBoundaryTests(unittest.TestCase):
         self.assertIn("WECHAT_COLLECTOR_API_KEY: ${{ secrets.WECHAT_COLLECTOR_API_KEY }}", workflow)
         self.assertNotIn("WECHAT_AUTH_KEY", workflow)
         self.assertNotIn("auth-key", workflow.casefold())
+        self.assertIn("force_news_brief:", workflow)
+        self.assertIn("python tools/sync_news.py --force-brief-from-recent", workflow)
 
     def test_wechat_migration_is_idempotency_guarded(self) -> None:
         migration = (Path(__file__).resolve().parents[1] / "schema" / "cloudbase-news-wechat-migration.sql").read_text(encoding="utf-8")
