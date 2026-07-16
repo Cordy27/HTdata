@@ -1,0 +1,9 @@
+{
+  "triggers": [
+    {
+      "name": "news-sync-bjt",
+      "type": "timer",
+      "config": "0 3 11,15,21 * * * *"
+    }
+  ]
+}

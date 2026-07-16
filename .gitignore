@@ -32,6 +32,8 @@ __pycache__/
 .vite/
 dist/
 build/
+cloudfunctions/ht-news-sync/tools/news_sync/
+cloudfunctions/ht-news-sync/config/news-sources.json
 
 # Local environment and editor files
 .env

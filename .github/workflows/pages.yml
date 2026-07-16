@@ -3,8 +3,6 @@ name: Deploy Pages
 on:
   push:
     branches: [main]
-  schedule:
-    - cron: "3 3,7,13 * * *"
   workflow_dispatch:
     inputs:
       refresh_news:
@@ -55,7 +53,7 @@ jobs:
         run: python tools/sync_data.py
 
       - name: Check news database schema
-        if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && (inputs.refresh_news == 'true' || inputs.force_news_brief == 'true')) }}
+        if: ${{ github.event_name == 'workflow_dispatch' && (inputs.refresh_news == 'true' || inputs.force_news_brief == 'true') }}
         env:
           CLOUDBASE_REQUIRED: "1"
           CLOUDBASE_ENV_ID: ${{ secrets.CLOUDBASE_ENV_ID }}
@@ -65,7 +63,7 @@ jobs:
         run: python tools/sync_news.py --check-cloudbase-schema
 
       - name: Warm up WeChat collector
-        if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.refresh_news == 'true') }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.refresh_news == 'true' }}
         continue-on-error: true
         env:
           WECHAT_EXPORTER_BASE_URL: ${{ secrets.WECHAT_EXPORTER_BASE_URL }}
@@ -76,7 +74,7 @@ jobs:
           --request-timeout-seconds 30
 
       - name: Generate news data
-        if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && (inputs.refresh_news == 'true' || inputs.force_news_brief == 'true')) }}
+        if: ${{ github.event_name == 'workflow_dispatch' && (inputs.refresh_news == 'true' || inputs.force_news_brief == 'true') }}
         env:
           CLOUDBASE_REQUIRED: "1"
           AI_REQUIRED: "1"
