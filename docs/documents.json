@@ -1,0 +1,13 @@
+{
+  "documents": [
+    {
+      "slug": "news-api",
+      "title": "News API",
+      "kicker": "RSS + WECHAT / READ-ONLY API",
+      "summary": "面向外部 Agent 的 RSS 与微信公众号新闻聚合查询接口。支持来源发现、关键词检索、正文读取与按 ID 批量取数。",
+      "source": "content/news-api.md",
+      "updated": "2026-07-24",
+      "widgets": ["news-api-console"]
+    }
+  ]
+}

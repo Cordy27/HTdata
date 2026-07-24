@@ -20,7 +20,7 @@ from news_sync.constants import NEWS_ITEMS_TABLE, NEWS_RUNS_TABLE, NEWS_WECHAT_A
 from news_sync.domain import make_item, merge_items, prepare_ai_candidates, same_event
 from news_sync.service import SyncOptions, run_sync
 from news_sync.storage import persist_cloudbase
-from news_sync.wechat import fetch_wechat, request_account_articles
+from news_sync.wechat import article_content_fields, fetch_wechat, request_account_articles
 
 
 NOW = datetime(2026, 7, 13, 12, 0, tzinfo=SHANGHAI_TZ)
@@ -39,6 +39,30 @@ def wechat_config() -> dict:
 
 
 class WechatAdapterTests(unittest.TestCase):
+    def test_adapter_always_sanitizes_returned_html(self) -> None:
+        content = article_content_fields({
+            "contentText": "safe text",
+            "contentHtml": (
+                '<article><p>safe</p><script>bad()</script>'
+                '<a href="https://user:password@example.com/path?appmsg_token=secret&keep=yes#fragment">link</a>'
+                '</article>'
+            ),
+            "contentStatus": "available",
+        }, NOW, "summary")
+        self.assertEqual(content["contentText"], "safe text")
+        self.assertNotIn("script", content["contentHtml"])
+        self.assertNotIn("user:password", content["contentHtml"])
+        self.assertNotIn("appmsg_token", content["contentHtml"])
+        self.assertNotIn("fragment", content["contentHtml"])
+        self.assertIn("keep=yes", content["contentHtml"])
+
+    def test_recovery_only_requires_explicit_account_ids_at_service_boundary(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "requires wechatAccountIds"):
+            run_sync(SyncOptions(
+                config_path=Path("not-read-because-options-are-invalid.json"),
+                wechat_recovery_only=True,
+            ))
+
     def test_missing_collector_configuration_is_nonfatal(self) -> None:
         warnings: list[str] = []
         with patch.dict(os.environ, {
@@ -63,6 +87,25 @@ class WechatAdapterTests(unittest.TestCase):
         self.assertEqual(request.get_header("Authorization"), "Bearer secret")
         self.assertIn("/api/internal/v1/collector/accounts/MzA%3D/articles", request.full_url)
         self.assertIn("begin=20&size=20", request.full_url)
+
+    @patch("news_sync.wechat.urlopen")
+    def test_private_collector_rejects_oversized_response(self, urlopen_mock) -> None:
+        response = MagicMock()
+        response.read.return_value = b"x" * 11
+        response.__enter__.return_value = response
+        urlopen_mock.return_value = response
+
+        with self.assertRaisesRegex(RuntimeError, "configured byte limit"):
+            request_account_articles(
+                "https://collector.example.com",
+                "secret",
+                "fake-1",
+                20,
+                30,
+                max_response_bytes=10,
+            )
+
+        response.read.assert_called_once_with(11)
 
     @patch("news_sync.wechat.time.sleep")
     @patch("news_sync.wechat.urlopen")
@@ -195,6 +238,33 @@ class WechatAdapterTests(unittest.TestCase):
         self.assertEqual(request_mock.call_args_list[1].kwargs["begin"], 2)
 
     @patch("news_sync.wechat.request_account_articles")
+    def test_multi_article_groups_follow_page_metadata_without_false_extra_page(self, request_mock) -> None:
+        request_mock.return_value = {
+            "ok": True,
+            "articles": [
+                {
+                    "aid": f"group_article_{index}",
+                    "title": f"AI news {index}",
+                    "link": f"https://mp.weixin.qq.com/s/{index}",
+                    "create_time": 1783911600 - index,
+                }
+                for index in range(8)
+            ],
+            "page": {"begin": 0, "size": 5, "totalCount": 5, "nextBegin": None, "hasMore": False},
+        }
+        config = wechat_config()
+        config["wechat"].update({"pageSize": 5, "maxPagesPerAccount": 3})
+        with patch.dict(os.environ, {
+            "WECHAT_EXPORTER_BASE_URL": "https://collector.example.com",
+            "WECHAT_COLLECTOR_API_KEY": "secret",
+        }, clear=False):
+            result = fetch_wechat(config, NOW, [], [])
+
+        self.assertEqual(len(result.items), 8)
+        self.assertEqual(result.stats["successfulAccounts"], 1)
+        request_mock.assert_called_once()
+
+    @patch("news_sync.wechat.request_account_articles")
     def test_later_page_failure_discards_partial_items_and_preserves_cursor(self, request_mock) -> None:
         request_mock.side_effect = [
             {
@@ -220,7 +290,7 @@ class WechatAdapterTests(unittest.TestCase):
         self.assertEqual(result.stats["failedAccounts"], 1)
 
     @patch("news_sync.wechat.request_account_articles")
-    def test_maps_title_matches_and_rejects_summary_only_matches(self, request_mock) -> None:
+    def test_maps_all_articles_but_only_tags_title_matches(self, request_mock) -> None:
         request_mock.return_value = {
             "ok": True,
             "articles": [
@@ -248,8 +318,11 @@ class WechatAdapterTests(unittest.TestCase):
             result = fetch_wechat(wechat_config(), NOW, [], warnings)
 
         self.assertEqual(warnings, [])
-        self.assertEqual(len(result.items), 1)
+        self.assertEqual(len(result.items), 2)
         self.assertEqual(result.items[0]["externalId"], "100_1")
+        self.assertTrue(result.items[0]["tags"])
+        self.assertEqual(result.items[1]["externalId"], "99_1")
+        self.assertEqual(result.items[1]["tags"], [])
         self.assertEqual(result.items[0]["sourceType"], "公众号")
         self.assertEqual(result.items[0]["summary"], "摘要")
         self.assertEqual(result.stats["fetchedArticles"], 2)
@@ -316,6 +389,27 @@ class WechatAdapterTests(unittest.TestCase):
         self.assertEqual(result.stats["failedAccounts"], 1)
         self.assertEqual(result.account_states[0]["cursorAid"], "old_1")
         self.assertEqual(result.account_states[0]["lastSuccessAt"], "2026-07-12 12:00:00")
+
+    @patch("news_sync.wechat.request_account_articles")
+    def test_page_cap_without_old_cursor_does_not_advance_or_partially_persist(self, request_mock) -> None:
+        request_mock.return_value = {
+            "ok": True,
+            "articles": [
+                {"aid": f"new_{index}", "title": f"AI news {index}", "link": "https://mp.weixin.qq.com/s/new", "create_time": 1783911600 - index}
+                for index in range(20)
+            ],
+        }
+        config = wechat_config()
+        config["wechat"]["maxPagesPerAccount"] = 1
+        prior = [{"id": "example", "fakeid": "fake-1", "cursorAid": "old_1"}]
+        with patch.dict(os.environ, {
+            "WECHAT_EXPORTER_BASE_URL": "https://collector.example.com",
+            "WECHAT_COLLECTOR_API_KEY": "secret",
+        }, clear=False):
+            result = fetch_wechat(config, NOW, prior, [])
+        self.assertEqual(result.items, [])
+        self.assertEqual(result.stats["failedAccounts"], 1)
+        self.assertEqual(result.account_states[0]["cursorAid"], "old_1")
 
     @patch("news_sync.wechat.request_account_articles")
     def test_changed_fakeid_resets_cursor_from_previous_binding(self, request_mock) -> None:
@@ -512,6 +606,8 @@ class WechatPersistenceTests(unittest.TestCase):
             [],
             account_states=[{"id": "example", "displayName": "示例", "fakeid": "fake-1"}],
             metrics={"aiCandidates": 1},
+            run_id="run_20260713120000_deadbeef",
+            public_new_count=1,
         )
         self.assertEqual(client.tables, [NEWS_ITEMS_TABLE, NEWS_WECHAT_ACCOUNTS_TABLE, NEWS_RUNS_TABLE])
 
@@ -536,6 +632,7 @@ class WechatPersistenceTests(unittest.TestCase):
             patch("news_sync.service.fetch_hotlists", return_value=[fetched_item]),
             patch("news_sync.service.fetch_rss", return_value=[]),
             patch("news_sync.service.fetch_wechat") as wechat_mock,
+            patch("news_sync.service.load_cloud_items_missing_content", return_value=[]),
             patch("news_sync.service.load_cloud_items_by_ids", return_value=[]),
             patch("news_sync.service.build_ai_brief", side_effect=RuntimeError("AI failed")),
             patch("news_sync.service.persist_cloudbase", return_value=[]) as persist_mock,

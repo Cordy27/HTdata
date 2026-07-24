@@ -3,7 +3,16 @@
     "apiUrl": "https://newsnow.busiyi.world/api/s",
     "lookbackDays": 7,
     "maxItems": 180,
-    "storageMaxItems": 1000,
+    "storageMaxItems": 20000,
+    "retentionDays": 180,
+    "fetchRssArticleContent": true,
+    "contentTimeoutSeconds": 12,
+    "contentFetchConcurrency": 4,
+    "contentMaxFetchPerRun": 200,
+    "contentRetryHours": 24,
+    "contentMaxDownloadBytes": 12000000,
+    "contentMaxTextBytes": 800000,
+    "contentMaxHtmlBytes": 2500000,
     "aiMaxCandidates": 60,
     "aiMaxBriefItems": 5,
     "aiTimeoutSeconds": 120,
@@ -15,9 +24,9 @@
   },
   "wechat": {
     "enabled": true,
-    "pageSize": 20,
-    "maxPagesPerAccount": 1,
-    "timeoutSeconds": 30,
+    "pageSize": 5,
+    "maxPagesPerAccount": 50,
+    "timeoutSeconds": 60,
     "accounts": [
       {
         "id": "xin-zhiyuan",
@@ -226,6 +235,7 @@
       "id": "yahoo-finance",
       "name": "Yahoo Finance",
       "url": "https://finance.yahoo.com/news/rssindex",
+      "contentAllowedDomains": ["yahoo.com"],
       "enabled": true,
       "maxAgeDays": 7
     },
@@ -233,6 +243,7 @@
       "id": "wsj-markets",
       "name": "WSJ Markets",
       "url": "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",
+      "contentAllowedDomains": ["wsj.com", "dowjones.com"],
       "enabled": true,
       "maxAgeDays": 7
     },
@@ -240,6 +251,8 @@
       "id": "hacker-news",
       "name": "Hacker News",
       "url": "https://hnrss.org/frontpage",
+      "contentAllowedDomains": [],
+      "allowAnyPublicContent": true,
       "enabled": true,
       "maxAgeDays": 7
     },
@@ -247,6 +260,7 @@
       "id": "ifanr",
       "name": "爱范儿",
       "url": "https://www.ifanr.com/feed",
+      "contentAllowedDomains": ["ifanr.com"],
       "enabled": true,
       "maxAgeDays": 7
     },
@@ -254,6 +268,7 @@
       "id": "ithome",
       "name": "IT之家",
       "url": "https://www.ithome.com/rss/",
+      "contentAllowedDomains": ["ithome.com"],
       "enabled": true,
       "maxAgeDays": 7
     },
@@ -261,6 +276,7 @@
       "id": "the-decoder",
       "name": "THE DECODER",
       "url": "https://the-decoder.com/feed/",
+      "contentAllowedDomains": ["the-decoder.com"],
       "enabled": true,
       "maxAgeDays": 7,
       "defaultTags": [
@@ -271,6 +287,7 @@
       "id": "venturebeat",
       "name": "VentureBeat",
       "url": "https://venturebeat.com/feed/",
+      "contentAllowedDomains": ["venturebeat.com"],
       "enabled": true,
       "maxAgeDays": 7
     },
@@ -278,6 +295,7 @@
       "id": "the-verge-ai",
       "name": "The Verge AI",
       "url": "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml",
+      "contentAllowedDomains": ["theverge.com"],
       "enabled": true,
       "maxAgeDays": 7,
       "defaultTags": [
@@ -288,6 +306,7 @@
       "id": "wired-ai",
       "name": "WIRED AI",
       "url": "https://www.wired.com/feed/tag/ai/latest/rss",
+      "contentAllowedDomains": ["wired.com"],
       "enabled": true,
       "maxAgeDays": 7,
       "defaultTags": [
@@ -298,6 +317,7 @@
       "id": "mit-tech-review-ai",
       "name": "MIT Technology Review AI",
       "url": "https://www.technologyreview.com/topic/artificial-intelligence/feed",
+      "contentAllowedDomains": ["technologyreview.com"],
       "enabled": true,
       "maxAgeDays": 7,
       "defaultTags": [

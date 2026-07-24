@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 from difflib import SequenceMatcher
 from datetime import datetime, timedelta
@@ -22,6 +23,13 @@ from .utils import (
 )
 
 
+def truncate_utf8(value: str, maximum_bytes: int) -> tuple[str, bool]:
+    encoded = str(value or "").encode("utf-8")
+    if len(encoded) <= maximum_bytes:
+        return str(value or ""), False
+    return encoded[:maximum_bytes].decode("utf-8", errors="ignore"), True
+
+
 def make_item(
     *,
     title: str,
@@ -35,6 +43,12 @@ def make_item(
     tags: list[str],
     matched_terms: list[str],
     summary: str,
+    content_text: str = "",
+    content_html: str = "",
+    content_status: str = "",
+    content_fetched_at: datetime | str | None = None,
+    content_hash: str = "",
+    content_error: str = "",
     identity_key: str = "",
     external_id: str = "",
     source_status: str = "",
@@ -42,6 +56,14 @@ def make_item(
     item_id = stable_id(source_type, source_id, identity_key or url, title)
     collected = format_dt(collected_at)
     published = format_dt(published_at) if published_at else ""
+    raw_content_text = str(content_text or "").strip()
+    raw_content_html = str(content_html or "").strip()
+    normalized_content_text, text_truncated = truncate_utf8(raw_content_text, 800_000)
+    normalized_content_html, html_truncated = truncate_utf8(raw_content_html, 2_500_000)
+    content_truncated = text_truncated or html_truncated
+    normalized_content_hash = clean_text(content_hash)
+    if normalized_content_text and (content_truncated or not normalized_content_hash):
+        normalized_content_hash = hashlib.sha256(normalized_content_text.encode("utf-8")).hexdigest()
     return {
         "id": item_id,
         "title": title,
@@ -53,6 +75,12 @@ def make_item(
         "tags": tags,
         "matchedTerms": matched_terms,
         "summary": summary[:260],
+        "contentText": normalized_content_text,
+        "contentHtml": normalized_content_html,
+        "contentStatus": "partial" if content_truncated else clean_text(content_status),
+        "contentFetchedAt": display_dt(content_fetched_at) if content_fetched_at else "",
+        "contentHash": normalized_content_hash,
+        "contentError": ("CONTENT_TRUNCATED" if content_truncated else clean_text(content_error))[:500],
         "externalId": external_id,
         "sourceStatus": source_status,
         "publishedAt": published,
@@ -100,11 +128,34 @@ def merge_items(
         current["externalId"] = item.get("externalId") or current.get("externalId", "")
         current["sourceStatus"] = item.get("sourceStatus") or current.get("sourceStatus", "")
         current["summary"] = item.get("summary") or current.get("summary", "")
+        merge_item_content(current, item)
         current["tags"] = unique_list([*current.get("tags", []), *item.get("tags", [])])
         current["matchedTerms"] = unique_list([*current.get("matchedTerms", []), *item.get("matchedTerms", [])])
         current["observations"] = int(current.get("observations", 1) or 1) + 1
         by_id[item_id] = current
     return list(by_id.values())
+
+
+def merge_item_content(current: dict[str, Any], fetched: dict[str, Any]) -> None:
+    """Keep a previously complete body when a refresh only returns partial metadata."""
+    current_status = clean_text(current.get("contentStatus"))
+    fetched_status = clean_text(fetched.get("contentStatus"))
+    current_text = str(current.get("contentText") or "").strip()
+    fetched_text = str(fetched.get("contentText") or "").strip()
+    should_replace = bool(fetched_text) and (
+        not current_text
+        or fetched_status == "available"
+        or current_status not in {"available", "partial"}
+    )
+    if should_replace:
+        for key in ("contentText", "contentHtml", "contentStatus", "contentFetchedAt", "contentHash", "contentError"):
+            current[key] = fetched.get(key, "")
+        return
+    if current_text:
+        return
+    for key in ("contentHtml", "contentStatus", "contentFetchedAt", "contentHash", "contentError"):
+        if fetched.get(key) not in (None, ""):
+            current[key] = fetched[key]
 
 
 def sort_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -285,9 +336,16 @@ def db_row_to_item(row: dict[str, Any]) -> dict[str, Any]:
         "tags": parse_json_list(row.get("tags_json")),
         "matchedTerms": parse_json_list(row.get("matched_terms_json")),
         "summary": clean_text(row.get("summary")),
+        "contentText": str(row.get("content_text") or "").strip(),
+        "contentHtml": str(row.get("content_html") or "").strip(),
+        "contentStatus": clean_text(row.get("content_status")),
+        "contentFetchedAt": display_dt(row.get("content_fetched_at")),
+        "contentHash": clean_text(row.get("content_hash")),
+        "contentError": clean_text(row.get("content_error")),
         "externalId": clean_text(row.get("external_id")),
         "sourceStatus": clean_text(row.get("source_status")),
         "publishedAt": display_dt(row.get("published_at")),
+        "firstSeenRunId": clean_text(row.get("first_seen_run_id")),
         "firstSeenAt": display_dt(row.get("first_seen_at")),
         "latestSeenAt": display_dt(row.get("latest_seen_at")),
         "collectedAt": display_dt(row.get("collected_at")),
@@ -329,9 +387,17 @@ def item_to_db_row(item: dict[str, Any]) -> dict[str, Any]:
         "tags_json": json.dumps(item.get("tags", []), ensure_ascii=False),
         "matched_terms_json": json.dumps(item.get("matchedTerms", []), ensure_ascii=False),
         "summary": item.get("summary", ""),
+        "content_text": item.get("contentText", ""),
+        "content_html": item.get("contentHtml", ""),
+        "content_status": item.get("contentStatus", ""),
+        "content_fetched_at": nullable_dt(item.get("contentFetchedAt")),
+        "content_hash": item.get("contentHash", ""),
+        "content_error": item.get("contentError", ""),
         "external_id": item.get("externalId", ""),
         "source_status": item.get("sourceStatus", ""),
         "published_at": nullable_dt(item.get("publishedAt")),
+        "effective_published_at": nullable_dt(item.get("publishedAt")) or nullable_dt(collected) or collected,
+        "first_seen_run_id": item.get("firstSeenRunId") or None,
         "first_seen_at": nullable_dt(first) or latest,
         "latest_seen_at": nullable_dt(latest) or latest,
         "collected_at": nullable_dt(collected) or latest,

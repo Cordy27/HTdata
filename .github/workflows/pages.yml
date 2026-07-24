@@ -102,6 +102,7 @@ jobs:
           cp index.html pages-dist/
           cp index.html pages-dist/404.html
           cp -r css js vendor pages-dist/
+          cp -r docs pages-dist/
           cp data/access-config.js pages-dist/data/
           cp data/portal-data.js pages-dist/data/
           ACCESS_PATH=$(python -c "import json; print(json.load(open('config/access.json', encoding='utf-8'))['accessPath'].strip('/'))")

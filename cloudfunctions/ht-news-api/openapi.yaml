@@ -1,0 +1,447 @@
+openapi: 3.1.0
+info:
+  title: Huatai RSS and WeChat News API
+  version: 1.0.0
+  description: Read-only aggregated RSS and WeChat article metadata and content. It does not summarize or trigger collection. Human documentation is available at https://cordy27.github.io/HTdata/docs/ and the agent guide is available at /llms.txt.
+servers:
+  - url: https://test-4gcfvxy0640ef41a.service.tcloudbase.com/news-api
+externalDocs:
+  description: Human-readable documentation and request console
+  url: https://cordy27.github.io/HTdata/docs/
+security:
+  - bearerAuth: []
+paths:
+  /openapi.yaml:
+    get:
+      security: []
+      operationId: getOpenApiDocument
+      summary: Download the canonical OpenAPI 3.1 document.
+      responses:
+        '200':
+          description: OpenAPI YAML document.
+          content:
+            application/yaml:
+              schema: { type: string }
+  /llms.txt:
+    get:
+      security: []
+      operationId: getAgentGuide
+      summary: Download the concise API guide for agents.
+      responses:
+        '200':
+          description: Plain-text agent integration guide.
+          content:
+            text/plain:
+              schema: { type: string }
+  /health:
+    get:
+      security: []
+      operationId: health
+      responses:
+        '200':
+          $ref: '#/components/responses/HealthResponse'
+  /api/v1/sources:
+    get:
+      operationId: listSources
+      responses:
+        '200':
+          $ref: '#/components/responses/SourcesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/DatabaseUnavailable'
+  /api/v1/news:
+    get:
+      operationId: searchNewsSimple
+      parameters:
+        - { name: q, in: query, description: Shorthand for one keyword., schema: { type: string, maxLength: 80 } }
+        - { name: keyword, in: query, description: Shorthand for one keyword., schema: { type: string, maxLength: 80 } }
+        - { name: keywords, in: query, description: Comma-separated or repeated keywords., style: form, explode: true, schema: { type: array, maxItems: 10, items: { type: string, maxLength: 80 } } }
+        - { name: keywordMode, in: query, schema: { type: string, enum: [any, all, phrase], default: any } }
+        - { name: keywordFields, in: query, description: Fields searched by keyword matching., style: form, explode: true, schema: { type: array, items: { type: string, enum: [title, summary, content] }, default: [title, summary, content] } }
+        - { name: phrase, in: query, schema: { type: string, maxLength: 800 } }
+        - { name: sourceTypes, in: query, style: form, explode: true, schema: { type: array, items: { type: string, enum: [rss, wechat] } } }
+        - { name: sourceType, in: query, style: form, explode: true, schema: { type: array, items: { type: string, enum: [rss, wechat] } } }
+        - { name: sourceIds, in: query, style: form, explode: true, schema: { type: array, maxItems: 100, items: { type: string } } }
+        - { name: sourceId, in: query, style: form, explode: true, schema: { type: array, maxItems: 100, items: { type: string } } }
+        - { name: sourceNames, in: query, style: form, explode: true, schema: { type: array, maxItems: 100, items: { type: string } } }
+        - { name: sourceName, in: query, style: form, explode: true, schema: { type: array, maxItems: 100, items: { type: string } } }
+        - { name: tags, in: query, style: form, explode: true, schema: { type: array, maxItems: 20, items: { type: string } } }
+        - { name: matchedTerms, in: query, style: form, explode: true, schema: { type: array, maxItems: 20, items: { type: string } } }
+        - { name: contentStatuses, in: query, style: form, explode: true, schema: { type: array, items: { type: string, enum: [pending, available, partial, unavailable] } } }
+        - { name: publishedFrom, in: query, schema: { type: string, format: date-time } }
+        - { name: publishedTo, in: query, schema: { type: string, format: date-time } }
+        - { name: changedAfter, in: query, schema: { type: string, format: date-time } }
+        - { name: minAiScore, in: query, schema: { type: number, minimum: 0, maximum: 100 } }
+        - { name: sortField, in: query, schema: { type: string, enum: [publishedAt, changedAt, aiScore], default: publishedAt } }
+        - { name: sortDirection, in: query, schema: { type: string, enum: [asc, desc], default: desc } }
+        - { name: limit, in: query, description: Full view is limited to 20; compact and standard are limited to 100., schema: { type: integer, minimum: 1, maximum: 100, default: 30 } }
+        - { name: cursor, in: query, description: Opaque cursor returned by a previous response., schema: { type: string } }
+        - { name: view, in: query, schema: { type: string, enum: [compact, standard, full], default: standard } }
+        - { name: includeHtml, in: query, description: Requires view=full., schema: { type: boolean, default: false } }
+      responses:
+        '200':
+          $ref: '#/components/responses/SearchResponse'
+        '400':
+          $ref: '#/components/responses/InvalidArgument'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          $ref: '#/components/responses/QueryTooBroad'
+        '503':
+          $ref: '#/components/responses/DatabaseUnavailable'
+  /api/v1/news/increments:
+    get:
+      operationId: getNewsIncrementBatch
+      summary: Return the latest non-empty ingestion batch or a specific immutable batch.
+      parameters:
+        - { name: batchId, in: query, description: Omit on the first request to select the latest public-news batch. Required with cursor., schema: { type: string, pattern: '^run_\d{14}_[0-9a-f]{8}$' } }
+        - { name: sourceTypes, in: query, style: form, explode: true, schema: { type: array, items: { type: string, enum: [rss, wechat] } } }
+        - { name: sourceType, in: query, style: form, explode: true, schema: { type: array, items: { type: string, enum: [rss, wechat] } } }
+        - { name: limit, in: query, description: Full view is limited to 20; compact and standard are limited to 100., schema: { type: integer, minimum: 1, maximum: 100, default: 30 } }
+        - { name: cursor, in: query, description: Opaque cursor returned by the same batch. batchId is required when this is set., schema: { type: string } }
+        - { name: view, in: query, schema: { type: string, enum: [compact, standard, full], default: standard } }
+        - { name: includeHtml, in: query, description: Requires view=full., schema: { type: boolean, default: false } }
+      responses:
+        '200':
+          $ref: '#/components/responses/IncrementResponse'
+        '400':
+          $ref: '#/components/responses/InvalidArgument'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/BatchNotFound'
+        '413':
+          $ref: '#/components/responses/QueryTooBroad'
+        '503':
+          $ref: '#/components/responses/DatabaseUnavailable'
+  /api/v1/news/search:
+    post:
+      operationId: searchNews
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/SearchResponse'
+        '400':
+          $ref: '#/components/responses/InvalidArgument'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          $ref: '#/components/responses/QueryTooBroad'
+        '503':
+          $ref: '#/components/responses/DatabaseUnavailable'
+  /api/v1/news/{id}:
+    get:
+      operationId: getNews
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, pattern: '^[A-Za-z0-9_-]{1,64}$' } }
+        - { name: includeHtml, in: query, schema: { type: boolean, default: false } }
+      responses:
+        '200':
+          $ref: '#/components/responses/DetailResponse'
+        '400':
+          $ref: '#/components/responses/InvalidArgument'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NewsNotFound'
+        '503':
+          $ref: '#/components/responses/DatabaseUnavailable'
+  /api/v1/news/batch:
+    post:
+      operationId: batchGetNews
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/BatchResponse'
+        '400':
+          $ref: '#/components/responses/InvalidArgument'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          $ref: '#/components/responses/QueryTooBroad'
+        '503':
+          $ref: '#/components/responses/DatabaseUnavailable'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: API key
+      description: 'Send the server-issued API key as Authorization: Bearer <key>.'
+  responses:
+    HealthResponse:
+      description: Health check response.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/HealthResponse'
+    SourcesResponse:
+      description: Available RSS and WeChat sources.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/SourcesResponse'
+    SearchResponse:
+      description: A page of matching news items.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/SearchResponse'
+    IncrementResponse:
+      description: One immutable first-seen news batch and its page of articles.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/IncrementResponse'
+    DetailResponse:
+      description: Full article data including plain text content.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/DetailResponse'
+    BatchResponse:
+      description: Requested news items in requested ID order.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/BatchResponse'
+    InvalidArgument:
+      description: The request is malformed or contains an unsupported value.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: A valid Bearer API key is required.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    QueryTooBroad:
+      description: The request exceeds body, scan, batch, or response limits.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NewsNotFound:
+      description: The requested news item was not found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    BatchNotFound:
+      description: The requested batch does not exist, has expired, or contains no public news increments.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    DatabaseUnavailable:
+      description: The news database is temporarily unavailable.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    Meta:
+      type: object
+      required: [requestId, generatedAt, schemaVersion]
+      properties:
+        requestId: { type: string }
+        generatedAt: { type: string, format: date-time }
+        schemaVersion: { type: string, const: '1' }
+        snapshotAt: { type: [string, 'null'], format: date-time }
+    Error:
+      type: object
+      required: [code, message, retryable]
+      properties:
+        code:
+          type: string
+          enum: [INVALID_ARGUMENT, INVALID_CURSOR, UNAUTHORIZED, QUERY_TOO_BROAD, NEWS_NOT_FOUND, BATCH_NOT_FOUND, DATABASE_UNAVAILABLE, RESPONSE_TOO_LARGE, INTERNAL_ERROR, NOT_FOUND]
+        message: { type: string }
+        retryable: { type: boolean }
+        details: { type: object, additionalProperties: true }
+    ErrorResponse:
+      type: object
+      required: [ok, error, meta]
+      properties:
+        ok: { type: boolean, const: false }
+        error: { $ref: '#/components/schemas/Error' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    HealthResponse:
+      type: object
+      required: [ok, data, meta]
+      properties:
+        ok: { type: boolean, const: true }
+        data:
+          type: object
+          required: [service, status]
+          properties:
+            service: { type: string, const: ht-news-api }
+            status: { type: string, const: ok }
+        meta: { $ref: '#/components/schemas/Meta' }
+    Source:
+      type: object
+      required: [id, name, type, count]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        type: { type: string, enum: [rss, wechat] }
+        count: { type: integer, minimum: 0 }
+    SourcesResponse:
+      type: object
+      required: [ok, data, meta]
+      properties:
+        ok: { type: boolean, const: true }
+        data:
+          type: object
+          required: [sources]
+          properties:
+            sources: { type: array, items: { $ref: '#/components/schemas/Source' } }
+        meta: { $ref: '#/components/schemas/Meta' }
+    NewsItem:
+      type: object
+      required: [id, title, url, source, publishedAt, changedAt, aiScore]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        url: { type: string }
+        source:
+          type: object
+          required: [id, name, type]
+          properties:
+            id: { type: string }
+            name: { type: string }
+            type: { type: string, enum: [rss, wechat] }
+        publishedAt: { type: [string, 'null'], format: date-time }
+        changedAt: { type: [string, 'null'], format: date-time }
+        aiScore: { type: [number, 'null'], minimum: 0, maximum: 100 }
+        summary: { type: string }
+        tags: { type: array, items: { type: string } }
+        matchedTerms: { type: array, items: { type: string } }
+        contentStatus: { type: string, enum: [pending, available, partial, unavailable] }
+        contentFetchedAt: { type: [string, 'null'], format: date-time }
+        collectedAt: { type: [string, 'null'], format: date-time }
+        contentText: { type: string }
+        contentHtml: { type: string, description: Present only when includeHtml=true. }
+        contentHash: { type: [string, 'null'], pattern: '^[0-9a-f]{64}$' }
+        contentError: { type: [string, 'null'] }
+        aiReason: { type: string }
+        sourceStatus: { type: string }
+        externalId: { type: string }
+        firstSeenAt: { type: [string, 'null'], format: date-time }
+        latestSeenAt: { type: [string, 'null'], format: date-time }
+        observations: { type: integer, minimum: 0 }
+    Page:
+      type: object
+      required: [nextCursor, hasMore]
+      properties:
+        nextCursor: { type: [string, 'null'] }
+        hasMore: { type: boolean }
+    SearchRequest:
+      type: object
+      properties:
+        q: { type: string, maxLength: 80 }
+        keyword: { type: string, maxLength: 80 }
+        keywords: { type: array, maxItems: 10, items: { type: string, maxLength: 80 } }
+        keywordMode: { type: string, enum: [any, all, phrase], default: any }
+        keywordFields: { type: array, items: { type: string, enum: [title, summary, content] }, default: [title, summary, content] }
+        phrase: { type: string, maxLength: 800 }
+        sourceTypes: { type: array, items: { type: string, enum: [rss, wechat] } }
+        sourceIds: { type: array, maxItems: 100, items: { type: string } }
+        sourceNames: { type: array, maxItems: 100, items: { type: string } }
+        tags: { type: array, maxItems: 20, items: { type: string } }
+        matchedTerms: { type: array, maxItems: 20, items: { type: string } }
+        contentStatuses: { type: array, items: { type: string, enum: [pending, available, partial, unavailable] } }
+        publishedFrom: { type: string, format: date-time }
+        publishedTo: { type: string, format: date-time }
+        changedAfter: { type: string, format: date-time }
+        minAiScore: { type: number, minimum: 0, maximum: 100 }
+        sort:
+          type: object
+          properties:
+            field: { type: string, enum: [publishedAt, changedAt, aiScore] }
+            direction: { type: string, enum: [asc, desc] }
+        view: { type: string, enum: [compact, standard, full], default: standard }
+        includeHtml: { type: boolean, default: false }
+        page:
+          type: object
+          properties:
+            limit: { type: integer, minimum: 1, maximum: 100, default: 30, description: Maximum 20 for full view. }
+            cursor: { type: [string, 'null'] }
+    BatchRequest:
+      type: object
+      required: [ids]
+      properties:
+        ids: { type: array, minItems: 1, maxItems: 100, items: { type: string, pattern: '^[A-Za-z0-9_-]{1,64}$' }, description: Maximum 20 when content is returned, 5 when HTML is requested, otherwise 100. }
+        includeContent: { type: boolean, default: true }
+        includeHtml: { type: boolean, default: false, description: Requires content output and limits the request to 5 IDs. }
+        view: { type: string, enum: [compact, standard, full], default: full }
+    SearchData:
+      type: object
+      required: [items, page]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/NewsItem' } }
+        page: { $ref: '#/components/schemas/Page' }
+    SearchResponse:
+      type: object
+      required: [ok, data, meta]
+      properties:
+        ok: { type: boolean, const: true }
+        data: { $ref: '#/components/schemas/SearchData' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    IncrementBatch:
+      type: object
+      required: [id, runAt, newCount, status, previousBatchId]
+      properties:
+        id: { type: string, pattern: '^run_\d{14}_[0-9a-f]{8}$' }
+        runAt: { type: [string, 'null'], format: date-time }
+        newCount: { type: integer, minimum: 1 }
+        status: { type: string, enum: [complete, partial] }
+        previousBatchId: { type: [string, 'null'], pattern: '^run_\d{14}_[0-9a-f]{8}$' }
+    IncrementData:
+      type: object
+      required: [batch, items, page]
+      properties:
+        batch: { $ref: '#/components/schemas/IncrementBatch' }
+        items: { type: array, items: { $ref: '#/components/schemas/NewsItem' } }
+        page: { $ref: '#/components/schemas/Page' }
+    IncrementResponse:
+      type: object
+      required: [ok, data, meta]
+      properties:
+        ok: { type: boolean, const: true }
+        data: { $ref: '#/components/schemas/IncrementData' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    DetailResponse:
+      type: object
+      required: [ok, data, meta]
+      properties:
+        ok: { type: boolean, const: true }
+        data:
+          type: object
+          required: [item]
+          properties:
+            item: { $ref: '#/components/schemas/NewsItem' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    BatchResponse:
+      type: object
+      required: [ok, data, meta]
+      properties:
+        ok: { type: boolean, const: true }
+        data:
+          type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: '#/components/schemas/NewsItem' } }
+        meta: { $ref: '#/components/schemas/Meta' }

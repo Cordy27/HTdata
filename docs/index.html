@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="华泰互联网研究数据门户技术文档中心。">
+  <title>技术文档 | 华泰互联网</title>
+  <script>
+    (function () {
+      var segments = window.location.pathname.split('/').filter(Boolean);
+      var isGithubProject = window.location.hostname.endsWith('.github.io') && segments.length > 0;
+      var base = isGithubProject ? '/' + segments[0] + '/' : '/';
+      window.HT_PUBLIC_BASE = base;
+      document.write('<base href="' + base + '">');
+    })();
+  </script>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="docs/styles.css">
+</head>
+<body data-api-base="https://test-4gcfvxy0640ef41a.service.tcloudbase.com/news-api">
+  <div class="docs-shell">
+    <aside class="document-library" aria-label="技术文档目录">
+      <a class="portal-link" href="./" aria-label="返回研究数据门户">
+        <span class="portal-mark brand-mark">HT</span>
+        <span class="portal-copy"><strong>华泰互联网组</strong><small>技术文档中心</small></span>
+      </a>
+      <div class="library-body">
+        <div class="library-heading"><span class="mono">DOCUMENTS</span><strong>技术文档</strong></div>
+        <nav id="document-nav" class="document-nav" aria-label="文档列表"></nav>
+        <div class="library-foot">文档内容与接口契约同步维护于项目仓库。</div>
+      </div>
+    </aside>
+
+    <div class="docs-workspace">
+      <header class="docs-topbar">
+        <div class="docs-topbar-title"><span class="eyebrow">INTERNET RESEARCH WORKSPACE</span><strong>技术文档</strong></div>
+        <span class="docs-status"><i></i>Public reference</span>
+      </header>
+
+      <main class="document-main">
+        <header class="document-hero">
+          <p class="eyebrow" id="document-kicker">REFERENCE</p>
+          <h1 id="document-title">加载文档中</h1>
+          <p id="document-summary" class="document-summary"></p>
+          <div id="document-meta" class="document-meta"></div>
+        </header>
+        <article id="document-article" class="document-article" aria-live="polite"></article>
+      </main>
+    </div>
+  </div>
+
+  <template id="news-api-console-template">
+    <section class="api-console" aria-labelledby="api-console-title">
+      <header class="api-console-head"><div><span class="mono">LIVE REQUEST BUILDER</span><h2 id="api-console-title">构造并验证请求</h2></div><span class="memory-note"><i data-lucide="shield-check"></i>Key stays in this page only</span></header>
+        <div class="api-console-body">
+        <form class="api-controls">
+          <div class="control"><label>Bearer API Key<input data-field="api-key" type="password" autocomplete="off" spellcheck="false" placeholder="Paste a server-issued key for this session"></label></div>
+          <div class="control"><label>Operation<select data-field="operation"><option value="sources">GET /api/v1/sources</option><option value="increments">GET /api/v1/news/increments</option><option value="search" selected>GET /api/v1/news</option><option value="advanced">POST /api/v1/news/search</option><option value="detail">GET /api/v1/news/{id}</option><option value="batch">POST /api/v1/news/batch</option></select></label></div>
+          <div data-section="search"><div class="control"><label>Keywords<input data-field="keywords" autocomplete="off" placeholder="WAIC, 具身智能"></label></div><div class="two-col"><div class="control"><label>Mode<select data-field="keyword-mode"><option value="any">any</option><option value="all">all</option><option value="phrase">phrase</option></select></label></div><div class="control"><label>Source type<select data-field="source-type"><option value="">all sources</option><option value="rss">rss</option><option value="wechat">wechat</option></select></label></div></div><div class="date-range"><div class="control"><label>Published from<input data-field="published-from" type="datetime-local"></label></div><div class="control"><label>Published to<input data-field="published-to" type="datetime-local"></label></div></div><div class="three-col"><div class="control"><label>View<select data-field="view"><option value="compact">compact</option><option value="standard" selected>standard</option><option value="full">full</option></select></label></div><div class="control"><label>Limit<input data-field="limit" type="number" min="1" max="100" value="30"></label></div><div class="control"><label>Min AI score<input data-field="min-score" type="number" min="0" max="100" placeholder="0-100"></label></div></div><label class="check"><input data-field="include-html" type="checkbox"> Include sanitized HTML</label></div>
+          <div data-section="increments" hidden><div class="control"><label>Batch ID<input data-field="increment-batch-id" autocomplete="off" placeholder="Leave empty for latest batch"></label></div><div class="two-col"><div class="control"><label>Source type<select data-field="increment-source-type"><option value="">all sources</option><option value="rss">rss</option><option value="wechat">wechat</option></select></label></div><div class="control"><label>View<select data-field="increment-view"><option value="compact">compact</option><option value="standard" selected>standard</option><option value="full">full</option></select></label></div></div><div class="control"><label>Limit<input data-field="increment-limit" type="number" min="1" max="100" value="30"></label></div><label class="check"><input data-field="increment-html" type="checkbox"> Include sanitized HTML</label></div>
+          <div data-section="detail" hidden><div class="control"><label>Article ID<input data-field="article-id" autocomplete="off" placeholder="ARTICLE_ID"></label></div><label class="check"><input data-field="detail-html" type="checkbox"> Include sanitized HTML</label></div>
+          <div data-section="batch" hidden><div class="control"><label>Article IDs<textarea data-field="batch-ids" placeholder="One ID per line or comma-separated"></textarea></label></div><label class="check"><input data-field="include-content" type="checkbox" checked> Include plain text</label><label class="check"><input data-field="batch-html" type="checkbox"> Include sanitized HTML</label></div>
+          <div class="run-row"><button class="run-button primary-button" type="submit"><i data-lucide="play"></i><span>Run request</span></button><span data-field="run-status" class="run-status">Preview uses $NEWS_API_KEY.</span></div>
+        </form>
+        <div class="api-output"><div class="tabs tab-list" role="tablist"><button class="tab tab-button active" data-tab="curl" type="button">cURL</button><button class="tab tab-button" data-tab="python" type="button">Python</button><button class="tab tab-button" data-tab="javascript" type="button">JavaScript</button><button class="tab tab-button" data-tab="response" type="button">Response</button></div><div class="pane active" data-pane="curl"><div class="code-head"><span>Request preview</span><button class="icon-button" data-copy="curl" type="button" title="Copy cURL" aria-label="Copy cURL"><i data-lucide="copy"></i></button></div><pre data-code="curl"></pre></div><div class="pane" data-pane="python"><div class="code-head"><span>Requests</span><button class="icon-button" data-copy="python" type="button" title="Copy Python" aria-label="Copy Python"><i data-lucide="copy"></i></button></div><pre data-code="python"></pre></div><div class="pane" data-pane="javascript"><div class="code-head"><span>Fetch</span><button class="icon-button" data-copy="javascript" type="button" title="Copy JavaScript" aria-label="Copy JavaScript"><i data-lucide="copy"></i></button></div><pre data-code="javascript"></pre></div><div class="pane" data-pane="response"><div class="response-meta"><span data-field="response-status" class="response-pill">NOT RUN</span><span data-field="response-time"></span></div><pre data-field="response-code">Run a request to inspect the response.</pre></div></div>
+      </div>
+    </section>
+  </template>
+
+  <div id="toast" class="toast" role="status">Copied</div>
+  <script src="vendor/lucide.min.js"></script>
+  <script src="vendor/marked.min.js"></script>
+  <script src="docs/news-api-console.js"></script>
+  <script src="docs/app.js"></script>
+</body>
+</html>

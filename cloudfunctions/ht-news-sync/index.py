@@ -30,6 +30,11 @@ def _event_value(event: dict[str, Any], camel: str, snake: str, default: Any = N
     return event.get(snake, default)
 
 
+def _as_string_tuple(value: Any) -> tuple[str, ...]:
+    raw_values = value if isinstance(value, (list, tuple, set)) else str(value or "").split(",")
+    return tuple(dict.fromkeys(str(item).strip() for item in raw_values if str(item).strip()))
+
+
 def _validate_environment(*, check_schema: bool) -> None:
     required = ["CLOUDBASE_ENV_ID", "CLOUDBASE_API_KEY"]
     if not check_schema:
@@ -53,6 +58,19 @@ def main_handler(event: Any, context: Any) -> dict[str, Any]:
     clear_briefs = _as_bool(_event_value(payload, "clearBriefs", "clear_briefs"))
     raw_lookback = _event_value(payload, "lookbackDays", "lookback_days")
     lookback_days = int(raw_lookback) if raw_lookback not in (None, "") else None
+    wechat_account_ids = _as_string_tuple(
+        _event_value(payload, "wechatAccountIds", "wechat_account_ids", ())
+    )
+    wechat_recovery_only = _as_bool(
+        _event_value(payload, "wechatRecoveryOnly", "wechat_recovery_only")
+    )
+    content_backfill_only = _as_bool(
+        _event_value(payload, "contentBackfillOnly", "content_backfill_only")
+    )
+    if wechat_recovery_only and not wechat_account_ids:
+        raise RuntimeError("wechatRecoveryOnly requires wechatAccountIds.")
+    if wechat_recovery_only and content_backfill_only:
+        raise RuntimeError("wechatRecoveryOnly and contentBackfillOnly cannot be combined.")
 
     _validate_environment(check_schema=check_schema)
     if not check_schema:
@@ -60,6 +78,9 @@ def main_handler(event: Any, context: Any) -> dict[str, Any]:
     result = run_sync(SyncOptions(
         config_path=CONFIG_FILE,
         lookback_days=lookback_days,
+        wechat_account_ids=wechat_account_ids,
+        wechat_recovery_only=wechat_recovery_only,
+        content_backfill_only=content_backfill_only,
         check_schema=check_schema,
         clear_briefs=clear_briefs,
         force_brief_from_recent=force_brief,
@@ -68,3 +89,8 @@ def main_handler(event: Any, context: Any) -> dict[str, Any]:
     if not result.get("ok"):
         raise RuntimeError("News synchronization reported a business failure; inspect function logs and ht_news_sync_runs.")
     return result
+
+
+def main(event: Any, context: Any) -> dict[str, Any]:
+    """Compatibility entry point for the existing CloudBase handler."""
+    return main_handler(event, context)

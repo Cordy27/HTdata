@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import uuid
 from datetime import datetime
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -15,6 +14,15 @@ from urllib.request import Request, urlopen
 from .constants import NEWS_BRIEFS_TABLE, NEWS_ITEMS_TABLE, NEWS_RUNS_TABLE, NEWS_WECHAT_ACCOUNTS_TABLE
 from .domain import brief_to_db_row, db_row_to_brief, db_row_to_item, item_to_db_row, sort_briefs
 from .utils import chunked, clean_text, display_dt, format_dt, nullable_dt, unique_list
+
+
+NEWS_ITEM_METADATA_SELECT = (
+    "id,title,url,source_id,source_name,source_type,external_id,source_status,rank_num,"
+    "tags_json,matched_terms_json,summary,content_status,content_fetched_at,content_hash,"
+    "content_error,published_at,effective_published_at,first_seen_run_id,first_seen_at,latest_seen_at,collected_at,observations,"
+    "ai_score,ai_reason,created_at,updated_at"
+)
+NEWS_ITEM_BACKFILL_SELECT = f"{NEWS_ITEM_METADATA_SELECT},content_text,content_html"
 
 
 class CloudBaseClient:
@@ -85,9 +93,9 @@ class CloudBaseClient:
 
 def check_cloudbase_schema(client: CloudBaseClient) -> None:
     checks = {
-        NEWS_ITEMS_TABLE: "id,title,url,source_id,source_name,source_type,external_id,source_status,rank_num,tags_json,matched_terms_json,summary,published_at,first_seen_at,latest_seen_at,collected_at,observations,ai_score,ai_reason",
+        NEWS_ITEMS_TABLE: "id,title,url,source_id,source_name,source_type,external_id,source_status,rank_num,tags_json,matched_terms_json,summary,content_text,content_html,content_status,content_fetched_at,content_hash,content_error,published_at,effective_published_at,first_seen_run_id,first_seen_at,latest_seen_at,collected_at,observations,ai_score,ai_reason",
         NEWS_BRIEFS_TABLE: "id,run_at,window_start,window_end,candidate_count,selected_count,title,summary,items_json,prompt_version,model,raw_response",
-        NEWS_RUNS_TABLE: "id,run_at,fetched_count,item_count,new_count,issue_count,status,metrics_json,issues_json",
+        NEWS_RUNS_TABLE: "id,run_at,fetched_count,item_count,new_count,public_new_count,issue_count,status,metrics_json,issues_json",
         NEWS_WECHAT_ACCOUNTS_TABLE: "id,display_name,fakeid,enabled,cursor_aid,cursor_published_at,last_success_at,last_error",
     }
     for table, select in checks.items():
@@ -96,8 +104,20 @@ def check_cloudbase_schema(client: CloudBaseClient) -> None:
 
 def load_cloud_items(client: CloudBaseClient, limit: int) -> list[dict[str, Any]]:
     rows = client.get(NEWS_ITEMS_TABLE, {
-        "select": "*",
+        "select": NEWS_ITEM_METADATA_SELECT,
         "order": "latest_seen_at.desc",
+        "limit": str(limit),
+    })
+    return [db_row_to_item(row) for row in rows if isinstance(row, dict)]
+
+
+def load_cloud_items_missing_content(client: CloudBaseClient, limit: int) -> list[dict[str, Any]]:
+    rows = client.get(NEWS_ITEMS_TABLE, {
+        "select": NEWS_ITEM_BACKFILL_SELECT,
+        "source_type": "in.(RSS,公众号)",
+        "content_status": "in.(pending,partial,unavailable)",
+        "or": "(content_text.is.null,content_text.eq.)",
+        "order": "content_fetched_at.asc,first_seen_at.desc",
         "limit": str(limit),
     })
     return [db_row_to_item(row) for row in rows if isinstance(row, dict)]
@@ -161,9 +181,18 @@ def persist_cloudbase(
     account_states: list[dict[str, Any]] | None = None,
     metrics: dict[str, Any] | None = None,
     failures: list[str] | None = None,
+    total_item_count: int | None = None,
+    retention_cutoff: datetime | None = None,
+    storage_max_items: int | None = None,
+    run_id: str,
+    public_new_count: int,
 ) -> list[str]:
-    for chunk in chunked([item_to_db_row(item) for item in items], 50):
+    for chunk in chunk_rows_by_bytes([item_to_db_row(item) for item in items]):
         client.post(NEWS_ITEMS_TABLE, chunk, prefer="resolution=merge-duplicates,return=minimal")
+
+    if retention_cutoff is not None:
+        prune_cloud_items(client, retention_cutoff, storage_max_items)
+        prune_cloud_sync_runs(client, retention_cutoff)
 
     if brief:
         client.post(NEWS_BRIEFS_TABLE, brief_to_db_row(brief), prefer="resolution=merge-duplicates,return=minimal")
@@ -182,18 +211,71 @@ def persist_cloudbase(
     metrics_payload = dict(metrics or {})
     metrics_payload["issueCount"] = len(warnings)
     client.post(NEWS_RUNS_TABLE, {
-        "id": f"run_{now.strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8]}",
+        "id": run_id,
         "_openid": "",
         "run_at": format_dt(now),
         "fetched_count": fetched_count,
-        "item_count": len(items),
+        "item_count": int(total_item_count if total_item_count is not None else len(items)),
         "new_count": new_count,
+        "public_new_count": public_new_count,
         "issue_count": len(warnings),
         "status": "failed" if effective_failures else "ok",
         "metrics_json": json.dumps(metrics_payload, ensure_ascii=False),
         "issues_json": json.dumps(warnings[-20:], ensure_ascii=False),
     }, prefer="return=minimal")
     return persistence_failures
+
+
+def prune_cloud_sync_runs(client: CloudBaseClient, cutoff: datetime) -> None:
+    client.delete(NEWS_RUNS_TABLE, {"run_at": f"lt.{format_dt(cutoff)}"})
+
+
+def chunk_rows_by_bytes(
+    rows: list[dict[str, Any]],
+    *,
+    max_rows: int = 50,
+    max_bytes: int = 4_000_000,
+) -> list[list[dict[str, Any]]]:
+    chunks: list[list[dict[str, Any]]] = []
+    current: list[dict[str, Any]] = []
+    current_bytes = 2
+    for row in rows:
+        row_bytes = len(json.dumps(row, ensure_ascii=False).encode("utf-8")) + 1
+        if row_bytes > max_bytes:
+            raise RuntimeError("news item payload exceeds the CloudBase write limit")
+        if current and (len(current) >= max_rows or current_bytes + row_bytes > max_bytes):
+            chunks.append(current)
+            current = []
+            current_bytes = 2
+        current.append(row)
+        current_bytes += row_bytes
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def prune_cloud_items(client: CloudBaseClient, cutoff: datetime, storage_max_items: int | None) -> None:
+    cutoff_value = format_dt(cutoff)
+    client.delete(NEWS_ITEMS_TABLE, {"published_at": f"lt.{cutoff_value}"})
+    client.delete(NEWS_ITEMS_TABLE, {
+        "published_at": "is.null",
+        "first_seen_at": f"lt.{cutoff_value}",
+    })
+    maximum = int(storage_max_items or 0)
+    if maximum <= 0:
+        return
+    while True:
+        overflow = client.get(NEWS_ITEMS_TABLE, {
+            "select": "id",
+            "order": "first_seen_at.desc",
+            "offset": str(maximum),
+            "limit": "500",
+        })
+        ids = [clean_text(row.get("id")) for row in overflow if isinstance(row, dict) and row.get("id")]
+        if not ids:
+            break
+        for group in chunked(ids, 40):
+            client.delete(NEWS_ITEMS_TABLE, {"id": f"in.({','.join(group)})"})
 
 
 def wechat_state_from_db(row: dict[str, Any]) -> dict[str, Any]:

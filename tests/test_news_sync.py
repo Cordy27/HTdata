@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import json
 import os
+import ssl
 import sys
 import unittest
 from datetime import datetime
+from email.message import Message
 from pathlib import Path
-from unittest.mock import ANY, patch
+from unittest.mock import ANY, MagicMock, patch
 
 
 TOOLS_DIR = Path(__file__).resolve().parents[1] / "tools"
@@ -18,12 +20,109 @@ from news_sync.cli import build_parser
 from news_sync.constants import NEWS_BRIEFS_TABLE, NEWS_ITEMS_TABLE, NEWS_RUNS_TABLE, SHANGHAI_TZ
 from news_sync.domain import merge_items, normalize_brief_item
 from news_sync.prompt import build_brief_messages
-from news_sync.service import SyncOptions, run_sync
-from news_sync.sources import classify, fetch_hotlists, fetch_rss
-from news_sync.storage import CloudBaseClient, persist_cloudbase
+from news_sync.safe_http import PinnedHTTPSConnection, fetch_public_text
+from news_sync.service import SyncOptions, restrict_wechat_accounts, run_sync
+from news_sync.sources import classify, extract_article_content, fetch_hotlists, fetch_rss, safe_article_source_url
+from news_sync.storage import (
+    CloudBaseClient,
+    chunk_rows_by_bytes,
+    load_cloud_items_missing_content,
+    persist_cloudbase,
+    prune_cloud_items,
+)
 
 
 class NewsSourceTests(unittest.TestCase):
+    @patch("news_sync.safe_http.socket.getaddrinfo", return_value=[(2, 1, 6, "", ("127.0.0.1", 443))])
+    def test_article_url_rejects_domains_resolving_to_private_addresses(self, getaddrinfo_mock) -> None:
+        self.assertFalse(safe_article_source_url("https://example.test/article", ["example.test"]))
+
+    @patch("news_sync.safe_http.request_pinned")
+    @patch("news_sync.safe_http.resolve_public_addresses")
+    def test_redirect_is_revalidated_and_pinned_to_each_resolved_ip(
+        self,
+        resolve_mock,
+        request_mock,
+    ) -> None:
+        resolve_mock.side_effect = [("93.184.216.34",), ("151.101.1.69",)]
+        redirect = MagicMock()
+        redirect.status = 302
+        redirect.getheader.side_effect = lambda name: "https://next.example.test/final" if name == "Location" else None
+        final = MagicMock()
+        final.status = 200
+        final.getheader.return_value = None
+        final.read.return_value = b"body"
+        final.headers = Message()
+        request_mock.side_effect = [(redirect, MagicMock()), (final, MagicMock())]
+
+        body = fetch_public_text(
+            "https://start.example.test/article",
+            5,
+            max_bytes=100,
+            allowed_domains=["example.test"],
+        )
+
+        self.assertEqual(body, "body")
+        self.assertEqual(request_mock.call_args_list[0].args[0].addresses, ("93.184.216.34",))
+        self.assertEqual(request_mock.call_args_list[1].args[0].addresses, ("151.101.1.69",))
+        self.assertEqual(resolve_mock.call_count, 2)
+
+    @patch("news_sync.safe_http.request_pinned")
+    @patch("news_sync.safe_http.resolve_public_addresses")
+    def test_redirect_to_private_dns_target_is_rejected_before_connect(
+        self,
+        resolve_mock,
+        request_mock,
+    ) -> None:
+        resolve_mock.side_effect = [("93.184.216.34",), RuntimeError("DNS returned a non-public address")]
+        redirect = MagicMock()
+        redirect.status = 302
+        redirect.getheader.side_effect = lambda name: "https://private.example.test/" if name == "Location" else None
+        request_mock.return_value = (redirect, MagicMock())
+
+        with self.assertRaisesRegex(RuntimeError, "non-public"):
+            fetch_public_text(
+                "https://start.example.test/article",
+                5,
+                max_bytes=100,
+                allowed_domains=["example.test"],
+            )
+
+        self.assertEqual(request_mock.call_count, 1)
+
+    def test_https_connection_uses_pinned_ip_and_original_host_for_sni(self) -> None:
+        connection = PinnedHTTPSConnection(
+            "news.example.com",
+            "93.184.216.34",
+            443,
+            timeout=5,
+        )
+        raw_socket = MagicMock()
+        tls_socket = MagicMock()
+        context = MagicMock(spec=ssl.SSLContext)
+        context.wrap_socket.return_value = tls_socket
+        connection._context = context
+        connection._create_connection = MagicMock(return_value=raw_socket)
+
+        connection.connect()
+
+        connection._create_connection.assert_called_once_with(
+            ("93.184.216.34", 443),
+            5,
+            connection.source_address,
+        )
+        context.wrap_socket.assert_called_once_with(raw_socket, server_hostname="news.example.com")
+        self.assertIs(connection.sock, tls_socket)
+
+    def test_extract_article_content_removes_active_content(self) -> None:
+        text, safe_html = extract_article_content(
+            '<article><h1>Title</h1><p>Body</p><script>bad()</script>'
+            '<a href="javascript:bad()">link</a></article>'
+        )
+        self.assertIn("Body", text)
+        self.assertNotIn("script", safe_html)
+        self.assertNotIn("javascript:", safe_html)
+
     def test_ascii_terms_respect_word_boundaries(self) -> None:
         config = {
             "keywordGroups": [
@@ -97,6 +196,55 @@ class NewsSourceTests(unittest.TestCase):
 
 
 class NewsDomainTests(unittest.TestCase):
+    def test_manual_recovery_can_restrict_wechat_accounts(self) -> None:
+        config = {"wechat": {"accounts": [{"id": "one"}, {"id": "two"}]}}
+        restrict_wechat_accounts(config, ("two",))
+        self.assertEqual(config["wechat"]["accounts"], [{"id": "two"}])
+        with self.assertRaisesRegex(RuntimeError, "Unknown WeChat account IDs"):
+            restrict_wechat_accounts(config, ("missing",))
+
+    def test_content_backfill_query_excludes_rows_that_already_have_text(self) -> None:
+        client = MagicMock()
+        client.get.return_value = []
+
+        load_cloud_items_missing_content(client, 25)
+
+        query = client.get.call_args.args[1]
+        self.assertEqual(query["or"], "(content_text.is.null,content_text.eq.)")
+        self.assertEqual(query["limit"], "25")
+
+    def test_merge_items_preserves_complete_content_on_partial_refresh(self) -> None:
+        now = datetime(2026, 7, 13, 12, 0, tzinfo=SHANGHAI_TZ)
+        existing = [{
+            "id": "item-1", "title": "Existing", "url": "https://example.com/old",
+            "tags": [], "matchedTerms": [], "latestSeenAt": "2026-07-13 09:00:00",
+            "contentText": "complete body", "contentHtml": "<p>complete body</p>",
+            "contentStatus": "available", "observations": 1,
+        }]
+        fetched = [{
+            "id": "item-1", "title": "Existing", "url": "https://example.com/new",
+            "tags": [], "matchedTerms": [], "latestSeenAt": "2026-07-13 12:00:00",
+            "contentText": "", "contentStatus": "unavailable", "observations": 1,
+        }]
+        merged = merge_items(existing, fetched, now, 180)
+        self.assertEqual(merged[0]["contentText"], "complete body")
+        self.assertEqual(merged[0]["contentStatus"], "available")
+
+    def test_storage_chunks_respect_serialized_byte_limit(self) -> None:
+        chunks = chunk_rows_by_bytes(
+            [{"id": "one", "content_text": "a" * 30}, {"id": "two", "content_text": "b" * 30}],
+            max_rows=50,
+            max_bytes=80,
+        )
+        self.assertEqual(len(chunks), 2)
+
+    def test_prune_deletes_expired_and_overflow_rows(self) -> None:
+        client = MagicMock()
+        client.get.side_effect = [[{"id": "overflow"}], []]
+        prune_cloud_items(client, datetime(2026, 1, 1, tzinfo=SHANGHAI_TZ), 100)
+        self.assertGreaterEqual(client.delete.call_count, 3)
+        self.assertEqual(client.get.call_args_list[0].args[1]["offset"], "100")
+
     def test_merge_items_preserves_identity_and_updates_observations(self) -> None:
         now = datetime(2026, 7, 13, 12, 0, tzinfo=SHANGHAI_TZ)
         existing = [{
@@ -105,6 +253,7 @@ class NewsDomainTests(unittest.TestCase):
             "url": "https://example.com/old",
             "tags": ["AI"],
             "matchedTerms": ["AI"],
+            "firstSeenRunId": "run_existing",
             "latestSeenAt": "2026-07-13 09:00:00",
             "observations": 1,
         }]
@@ -124,6 +273,7 @@ class NewsDomainTests(unittest.TestCase):
         self.assertEqual(merged[0]["url"], "https://example.com/new")
         self.assertEqual(merged[0]["tags"], ["AI", "算力"])
         self.assertEqual(merged[0]["observations"], 2)
+        self.assertEqual(merged[0]["firstSeenRunId"], "run_existing")
 
     def test_brief_item_generates_forwardable_fallbacks(self) -> None:
         item = normalize_brief_item({
@@ -139,6 +289,81 @@ class NewsDomainTests(unittest.TestCase):
 
 
 class NewsIntegrationBoundaryTests(unittest.TestCase):
+    def test_content_backfill_only_skips_sources_and_ai(self) -> None:
+        with (
+            patch("news_sync.service.load_env_file"),
+            patch("news_sync.service.read_json", return_value={
+                "settings": {"lookbackDays": 7, "maxItems": 180, "contentMaxFetchPerRun": 200},
+            }),
+            patch("news_sync.service.is_ai_required", return_value=True),
+            patch("news_sync.service.CloudBaseClient.from_env", return_value=object()),
+            patch("news_sync.service.load_cloud_items", return_value=[]),
+            patch("news_sync.service.load_cloud_items_missing_content", return_value=[]) as backfill_mock,
+            patch("news_sync.service.load_cloud_briefs", side_effect=[[], []]),
+            patch("news_sync.service.load_wechat_account_states") as state_mock,
+            patch("news_sync.service.fetch_hotlists") as hotlists_mock,
+            patch("news_sync.service.fetch_rss") as rss_mock,
+            patch("news_sync.service.fetch_wechat") as wechat_mock,
+            patch("news_sync.service.build_ai_brief") as brief_mock,
+            patch("news_sync.service.persist_cloudbase", return_value=[]),
+            patch("news_sync.service.write_log"),
+        ):
+            result = run_sync(SyncOptions(
+                config_path=Path("unused.json"),
+                content_backfill_only=True,
+            ))
+
+        self.assertTrue(result["ok"])
+        backfill_mock.assert_called_once()
+        state_mock.assert_not_called()
+        hotlists_mock.assert_not_called()
+        rss_mock.assert_not_called()
+        wechat_mock.assert_not_called()
+        brief_mock.assert_not_called()
+
+    def test_wechat_recovery_only_skips_other_sources_backfill_and_ai(self) -> None:
+        wechat_result = MagicMock()
+        wechat_result.items = []
+        wechat_result.account_states = []
+        wechat_result.failures = []
+        wechat_result.stats = {}
+        config = {
+            "settings": {"lookbackDays": 7, "maxItems": 180},
+            "wechat": {
+                "enabled": True,
+                "accounts": [{"id": "one", "enabled": True}, {"id": "two", "enabled": True}],
+            },
+        }
+        with (
+            patch("news_sync.service.load_env_file"),
+            patch("news_sync.service.read_json", return_value=config),
+            patch("news_sync.service.is_ai_required", return_value=True),
+            patch("news_sync.service.CloudBaseClient.from_env", return_value=object()),
+            patch("news_sync.service.load_cloud_items", return_value=[]),
+            patch("news_sync.service.load_cloud_items_missing_content") as backfill_mock,
+            patch("news_sync.service.load_cloud_briefs", side_effect=[[], []]),
+            patch("news_sync.service.load_wechat_account_states", return_value=[]),
+            patch("news_sync.service.fetch_hotlists") as hotlists_mock,
+            patch("news_sync.service.fetch_rss") as rss_mock,
+            patch("news_sync.service.fetch_wechat", return_value=wechat_result) as wechat_mock,
+            patch("news_sync.service.build_ai_brief") as brief_mock,
+            patch("news_sync.service.persist_cloudbase", return_value=[]),
+            patch("news_sync.service.write_log"),
+        ):
+            result = run_sync(SyncOptions(
+                config_path=Path("unused.json"),
+                lookback_days=180,
+                wechat_account_ids=("two",),
+                wechat_recovery_only=True,
+            ))
+
+        self.assertTrue(result["ok"])
+        backfill_mock.assert_not_called()
+        hotlists_mock.assert_not_called()
+        rss_mock.assert_not_called()
+        brief_mock.assert_not_called()
+        self.assertEqual(wechat_mock.call_args.args[0]["wechat"]["accounts"], [{"id": "two", "enabled": True}])
+
     def test_ai_endpoint_normalization(self) -> None:
         self.assertEqual(
             normalize_ai_endpoint("https://example.com"),
@@ -220,6 +445,7 @@ class NewsIntegrationBoundaryTests(unittest.TestCase):
             "id": "item-1",
             "title": "示例新闻",
             "url": "https://example.com/1",
+            "sourceType": "RSS",
             "tags": ["AI"],
             "matchedTerms": ["AI"],
             "latestSeenAt": "2026-07-13 12:00:00",
@@ -234,8 +460,9 @@ class NewsIntegrationBoundaryTests(unittest.TestCase):
             patch("news_sync.service.CloudBaseClient.from_env", return_value=fake_cloudbase),
             patch("news_sync.service.load_cloud_items", return_value=[]),
             patch("news_sync.service.load_cloud_briefs", side_effect=[[], []]),
-            patch("news_sync.service.fetch_hotlists", return_value=[fetched_item]),
-            patch("news_sync.service.fetch_rss", return_value=[]),
+            patch("news_sync.service.fetch_hotlists", return_value=[]),
+            patch("news_sync.service.fetch_rss", return_value=[fetched_item]),
+            patch("news_sync.service.load_cloud_items_missing_content", return_value=[]),
             patch("news_sync.service.load_cloud_items_by_ids", return_value=[]),
             patch("news_sync.service.build_ai_brief", return_value=None),
             patch("news_sync.service.persist_cloudbase") as persist_mock,
@@ -245,9 +472,14 @@ class NewsIntegrationBoundaryTests(unittest.TestCase):
 
         self.assertEqual(result["fetched"], 1)
         self.assertEqual(result["newItems"], 1)
+        self.assertEqual(result["publicNewItems"], 1)
+        self.assertRegex(result["batchId"], r"^run_\d{14}_[0-9a-f]{8}$")
         self.assertEqual(result["items"], 1)
         self.assertEqual(result["storage"], "CloudBase")
         persist_mock.assert_called_once()
+        self.assertEqual(persist_mock.call_args.kwargs["run_id"], result["batchId"])
+        self.assertEqual(persist_mock.call_args.kwargs["public_new_count"], 1)
+        self.assertEqual(persist_mock.call_args.args[1][0]["firstSeenRunId"], result["batchId"])
 
     def test_storage_retention_is_independent_from_frontend_display_limit(self) -> None:
         fetched_items = [
@@ -276,6 +508,7 @@ class NewsIntegrationBoundaryTests(unittest.TestCase):
             patch("news_sync.service.load_cloud_briefs", side_effect=[[], []]),
             patch("news_sync.service.fetch_hotlists", return_value=fetched_items),
             patch("news_sync.service.fetch_rss", return_value=[]),
+            patch("news_sync.service.load_cloud_items_missing_content", return_value=[]),
             patch("news_sync.service.load_cloud_items_by_ids", return_value=[]),
             patch("news_sync.service.build_ai_brief", return_value=None),
             patch("news_sync.service.persist_cloudbase", return_value=[]) as persist_mock,
@@ -283,7 +516,7 @@ class NewsIntegrationBoundaryTests(unittest.TestCase):
         ):
             result = run_sync(SyncOptions(config_path=Path("unused.json")))
 
-        load_items_mock.assert_called_once_with(ANY, 9)
+        load_items_mock.assert_called_once_with(ANY, 3)
         self.assertEqual(len(persist_mock.call_args.args[1]), 2)
         self.assertEqual(result["items"], 2)
 
@@ -307,6 +540,7 @@ class NewsIntegrationBoundaryTests(unittest.TestCase):
             patch("news_sync.service.load_cloud_briefs", side_effect=[[], []]),
             patch("news_sync.service.fetch_hotlists", return_value=[dict(existing_item)]),
             patch("news_sync.service.fetch_rss", return_value=[]),
+            patch("news_sync.service.load_cloud_items_missing_content", return_value=[]),
             patch("news_sync.service.load_cloud_items_by_ids", return_value=[existing_item]),
             patch("news_sync.service.build_ai_brief", return_value=None) as brief_mock,
             patch("news_sync.service.persist_cloudbase", return_value=[]),
@@ -318,15 +552,16 @@ class NewsIntegrationBoundaryTests(unittest.TestCase):
         self.assertEqual(brief_mock.call_args.args[1], [])
 
     def test_force_brief_uses_only_existing_cloud_items(self) -> None:
+        recent_at = datetime.now(SHANGHAI_TZ).strftime("%Y-%m-%d %H:%M:%S")
         existing_item = {
             "id": "a" * 20,
             "title": "已入库 AI 新闻",
             "url": "https://example.com/existing",
             "tags": ["AI"],
             "matchedTerms": ["AI"],
-            "publishedAt": "2026-07-13 11:00:00",
-            "latestSeenAt": "2026-07-13 11:00:00",
-            "collectedAt": "2026-07-13 11:00:00",
+            "publishedAt": recent_at,
+            "latestSeenAt": recent_at,
+            "collectedAt": recent_at,
             "observations": 1,
         }
         with (
@@ -340,6 +575,7 @@ class NewsIntegrationBoundaryTests(unittest.TestCase):
             patch("news_sync.service.fetch_hotlists") as hotlists_mock,
             patch("news_sync.service.fetch_rss") as rss_mock,
             patch("news_sync.service.fetch_wechat") as wechat_mock,
+            patch("news_sync.service.load_cloud_items_missing_content", return_value=[]),
             patch("news_sync.service.load_cloud_items_by_ids") as load_ids_mock,
             patch("news_sync.service.build_ai_brief", return_value=None) as brief_mock,
             patch("news_sync.service.persist_cloudbase", return_value=[]),
@@ -379,6 +615,7 @@ class NewsIntegrationBoundaryTests(unittest.TestCase):
             patch("news_sync.service.fetch_hotlists", return_value=[fetched_item]),
             patch("news_sync.service.fetch_rss", return_value=[]),
             patch("news_sync.service.fetch_wechat") as wechat_mock,
+            patch("news_sync.service.load_cloud_items_missing_content", return_value=[]),
             patch("news_sync.service.load_cloud_items_by_ids", return_value=[]),
             patch("news_sync.service.build_ai_brief", return_value=None) as brief_mock,
             patch("news_sync.service.persist_cloudbase", return_value=[]) as persist_mock,
@@ -419,7 +656,11 @@ class NewsIntegrationBoundaryTests(unittest.TestCase):
             "items": [],
         }
 
-        persist_cloudbase(client, [item], brief, now, 1, 1, [])
+        persist_cloudbase(
+            client, [item], brief, now, 1, 1, [],
+            run_id="run_20260713120000_deadbeef",
+            public_new_count=1,
+        )
 
         self.assertEqual([post[0] for post in client.posts], [
             NEWS_ITEMS_TABLE,
@@ -429,6 +670,16 @@ class NewsIntegrationBoundaryTests(unittest.TestCase):
         self.assertEqual(client.posts[0][1][0]["id"], "a" * 20)
         self.assertEqual(client.posts[1][1]["id"], "b" * 20)
         self.assertEqual(client.posts[2][1]["new_count"], 1)
+        self.assertEqual(client.posts[2][1]["public_new_count"], 1)
+        self.assertEqual(client.posts[2][1]["id"], "run_20260713120000_deadbeef")
+
+    def test_batch_migration_is_idempotency_guarded_and_backfills_counts(self) -> None:
+        migration = (Path(__file__).resolve().parents[1] / "schema" / "cloudbase-news-batch-migration.sql").read_text(encoding="utf-8")
+        self.assertIn("information_schema.COLUMNS", migration)
+        self.assertIn("information_schema.STATISTICS", migration)
+        self.assertIn("first_seen_run_id", migration)
+        self.assertIn("public_new_count", migration)
+        self.assertIn("item.first_seen_at", migration)
 
 
 if __name__ == "__main__":

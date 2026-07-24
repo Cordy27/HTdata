@@ -12,7 +12,15 @@ CREATE TABLE IF NOT EXISTS ht_news_items (
   tags_json LONGTEXT,
   matched_terms_json LONGTEXT,
   summary TEXT,
+  content_text MEDIUMTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci,
+  content_html MEDIUMTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci,
+  content_status VARCHAR(24) NOT NULL DEFAULT 'pending',
+  content_fetched_at DATETIME NULL,
+  content_hash CHAR(64) NULL,
+  content_error VARCHAR(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL,
   published_at DATETIME NULL,
+  effective_published_at DATETIME NOT NULL,
+  first_seen_run_id VARCHAR(64) NULL,
   first_seen_at DATETIME NOT NULL,
   latest_seen_at DATETIME NOT NULL,
   collected_at DATETIME NOT NULL,
@@ -24,7 +32,13 @@ CREATE TABLE IF NOT EXISTS ht_news_items (
   INDEX idx_ht_news_latest (latest_seen_at),
   INDEX idx_ht_news_source (source_id),
   INDEX idx_ht_news_external (source_id, external_id),
-  INDEX idx_ht_news_score (ai_score)
+  INDEX idx_ht_news_score (ai_score),
+  INDEX idx_ht_news_published_id (published_at, id),
+  INDEX idx_ht_news_effective_published_id (effective_published_at, id),
+  INDEX idx_ht_news_type_published_id (source_type, published_at, id),
+  INDEX idx_ht_news_source_published_id (source_id, published_at, id),
+  INDEX idx_ht_news_first_seen_run (first_seen_run_id, effective_published_at, id),
+  INDEX idx_ht_news_updated_id (updated_at, id)
 );
 
 CREATE TABLE IF NOT EXISTS ht_news_briefs (
@@ -52,12 +66,14 @@ CREATE TABLE IF NOT EXISTS ht_news_sync_runs (
   fetched_count INT DEFAULT 0,
   item_count INT DEFAULT 0,
   new_count INT DEFAULT 0,
+  public_new_count INT DEFAULT 0,
   issue_count INT DEFAULT 0,
   status VARCHAR(20) DEFAULT 'ok',
   metrics_json LONGTEXT,
   issues_json LONGTEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  INDEX idx_ht_news_sync_runs_run_at (run_at)
+  INDEX idx_ht_news_sync_runs_run_at (run_at),
+  INDEX idx_ht_news_sync_public_batch (public_new_count, run_at, id)
 );
 
 CREATE TABLE IF NOT EXISTS ht_news_wechat_accounts (

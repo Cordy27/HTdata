@@ -1,0 +1,143 @@
+# Huatai RSS and WeChat News API
+
+## Purpose
+
+Read-only access to aggregated RSS and approved WeChat public-account news articles. Use this API to discover sources, read the latest ingestion increment, search news metadata and article text, fetch one article, or retrieve a bounded batch of known IDs.
+
+This API does not collect news, refresh sources, summarize articles, create reports, or expose hot-list data, collector sessions, internal account IDs, cursors, or logs.
+
+## Base URL and discovery
+
+Base URL: https://test-4gcfvxy0640ef41a.service.tcloudbase.com/news-api
+
+Human documentation: https://cordy27.github.io/HTdata/docs/
+OpenAPI 3.1 document: GET /openapi.yaml
+Agent guide: GET /llms.txt
+Health check: GET /health (no authentication)
+
+All paths below are relative to the base URL. The documentation, OpenAPI document, and this file are public. Every data route requires a server-issued API key.
+
+## Authentication
+
+Send the API key on every protected request:
+
+Authorization: Bearer <NEWS_API_KEY>
+
+Keep NEWS_API_KEY in the calling agent's secret store or environment. Never put it in source code, browser storage, prompts, logs, or URLs. A 401 response means the key is absent or invalid.
+
+## Core workflow for agents
+
+1. Call GET /api/v1/sources to discover supported RSS and WeChat source IDs and names.
+2. Use GET /api/v1/news/increments without batchId to receive the latest non-empty ingestion batch. Follow data.batch.previousBatchId to move backward through batch history.
+3. Use POST /api/v1/news/search for structured or multi-filter queries. Use GET /api/v1/news for simple URL-based queries.
+4. Request view=standard for normal search. Request view=full only when article text is required. Set includeHtml=false unless sanitized HTML is specifically necessary.
+5. Follow data.page.nextCursor exactly as an opaque value. Do not parse or modify it. Reuse the same filters and sort options for the next page. Increment pagination must include data.batch.id as batchId.
+6. Use GET /api/v1/news/{id} for one full article. Use POST /api/v1/news/batch only when IDs are already known.
+
+## Endpoints
+
+### GET /api/v1/sources
+
+Lists the available RSS and WeChat sources. No query parameters.
+
+Response data.sources entries contain id, name, type (rss or wechat), and count.
+
+### GET /api/v1/news
+
+Simple search with URL query parameters. Important parameters:
+
+- q or keyword: one keyword, maximum 80 characters.
+- keywords: comma-separated or repeated keywords, maximum 10.
+- keywordMode: any, all, or phrase. Default: any.
+- keywordFields: title, summary, and/or content. Default: all three.
+- phrase: exact phrase, maximum 800 characters.
+- sourceTypes: rss and/or wechat.
+- sourceIds or sourceNames: limit to known source values.
+- publishedFrom, publishedTo, changedAfter: ISO 8601 timestamps.
+- minAiScore: 0 to 100.
+- sortField: publishedAt, changedAt, or aiScore. Default: publishedAt.
+- sortDirection: asc or desc. Default: desc.
+- view: compact, standard, or full. Default: standard.
+- limit: 1 to 100. Full view is limited to 20.
+- cursor: opaque cursor from the prior response.
+- includeHtml: true only with view=full.
+
+### GET /api/v1/news/increments
+
+Returns articles first inserted during one immutable synchronization batch.
+
+- Omit batchId on the first request to select the latest batch with at least one RSS or WeChat increment.
+- Set batchId to data.batch.id or data.batch.previousBatchId to retrieve a specific batch.
+- When cursor is present, batchId is required and must remain unchanged.
+- sourceTypes, view, limit, cursor, and includeHtml follow the normal search limits.
+- data.batch contains id, runAt, newCount, status (complete or partial), and previousBatchId.
+- Batch history follows the same 180-day retention window as news articles.
+
+### POST /api/v1/news/search
+
+Structured search. Send the same filters as JSON. Use this route for arrays, exact field selection, or when a URL would be unwieldy.
+
+Minimal body:
+
+{"keywords":["WAIC","具身智能"],"keywordMode":"any","view":"standard","page":{"limit":30}}
+
+### GET /api/v1/news/{id}
+
+Fetches one article with plain-text content. Optional query parameter includeHtml=true returns sanitized HTML when available.
+
+### POST /api/v1/news/batch
+
+Fetches known article IDs in the requested order.
+
+- ids is required.
+- Metadata-only batches: maximum 100 IDs.
+- Batches that return plain-text content: maximum 20 IDs.
+- Batches that return HTML: maximum 5 IDs.
+- includeContent defaults to true. includeHtml requires content output.
+
+Example body:
+
+{"ids":["article-id-1","article-id-2"],"includeContent":true,"includeHtml":false,"view":"full"}
+
+## Response envelope
+
+Successful responses:
+
+{"ok":true,"data":{},"meta":{"requestId":"req_...","generatedAt":"2026-07-23T00:00:00.000Z","schemaVersion":"1"}}
+
+Search responses add data.items and data.page. data.page contains hasMore and nextCursor. nextCursor is null when there is no next page.
+
+Every article includes a source object, timestamps, contentStatus, and a stable id. Plain-text content is contentText in full views and detail responses. Sanitized HTML is contentHtml only when explicitly requested.
+
+## Content status
+
+- available: full cleaned text was fetched.
+- partial: some content was retained but is incomplete.
+- pending: content is not ready.
+- unavailable: the metadata exists but text could not be obtained.
+
+Treat unavailable and partial as normal data states, not request failures.
+
+## Limits and safe usage
+
+- Default search page size: 30. Maximum: 100.
+- Full search view: maximum 20 results.
+- Do not request HTML unless required.
+- Use time or source filters for broad content searches.
+- Do not attempt to query non-RSS/non-WeChat rows; the server rejects or excludes them.
+- Do not send SQL, arbitrary URLs, collector commands, or API keys in query parameters.
+
+## Errors and retries
+
+Errors use {"ok":false,"error":{"code":"...","message":"...","retryable":false},"meta":{...}}.
+
+- INVALID_ARGUMENT or INVALID_CURSOR: fix the request; do not retry unchanged.
+- UNAUTHORIZED: supply a valid API key.
+- NEWS_NOT_FOUND: the ID is absent or outside the allowed dataset.
+- BATCH_NOT_FOUND: the batch is unknown, expired, or contains no public RSS/WeChat increment.
+- QUERY_TOO_BROAD or RESPONSE_TOO_LARGE: narrow filters, lower limit, or omit HTML.
+- DATABASE_UNAVAILABLE or INTERNAL_ERROR with retryable=true: retry with exponential backoff.
+
+## Canonical schema
+
+The complete parameter and response contract is /openapi.yaml. Prefer it over this guide when generating a typed client or tool definition.

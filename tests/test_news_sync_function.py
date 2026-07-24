@@ -59,11 +59,16 @@ class NewsSyncFunctionTests(unittest.TestCase):
         ) as run_sync_mock:
             self.module.main_handler({
                 "lookbackDays": "3",
+                "wechatAccountIds": ["36kr", "cls"],
+                "wechatRecoveryOnly": True,
                 "forceBriefFromRecent": True,
                 "clearBriefs": "yes",
             }, None)
         options = run_sync_mock.call_args.args[0]
         self.assertEqual(options.lookback_days, 3)
+        self.assertEqual(options.wechat_account_ids, ("36kr", "cls"))
+        self.assertTrue(options.wechat_recovery_only)
+        self.assertFalse(options.content_backfill_only)
         self.assertTrue(options.force_brief_from_recent)
         self.assertTrue(options.clear_briefs)
 

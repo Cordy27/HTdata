@@ -16,12 +16,14 @@ from urllib.request import Request, urlopen
 
 from .constants import SHANGHAI_TZ
 from .domain import make_item
-from .sources import classify
+from .sources import classify, extract_article_content
 from .utils import clean_summary, clean_text, format_dt, parse_datetime
 
 
 RETRYABLE_HTTP_CODES = frozenset({502, 503, 504})
 ARTICLE_RETRY_DELAYS = (1, 2)
+DEFAULT_COLLECTOR_MAX_RESPONSE_BYTES = 60_000_000
+MAX_COLLECTOR_ERROR_BYTES = 65_536
 
 
 @dataclass
@@ -65,7 +67,15 @@ def fetch_wechat(
 
     timeout = int(source_config.get("timeoutSeconds") or config.get("settings", {}).get("timeoutSeconds", 12))
     page_size = max(1, min(20, int(source_config.get("pageSize", 20) or 20)))
-    max_pages = max(1, min(10, int(source_config.get("maxPagesPerAccount", 1) or 1)))
+    max_pages = max(1, min(50, int(source_config.get("maxPagesPerAccount", 1) or 1)))
+    max_response_bytes = max(
+        1_000_000,
+        min(
+            100_000_000,
+            int(source_config.get("maxResponseBytes", DEFAULT_COLLECTOR_MAX_RESPONSE_BYTES)
+                or DEFAULT_COLLECTOR_MAX_RESPONSE_BYTES),
+        ),
+    )
     lookback_days = int(config.get("settings", {}).get("lookbackDays", 7) or 7)
     cutoff = now - timedelta(days=lookback_days)
 
@@ -104,8 +114,12 @@ def fetch_wechat(
             newest: dict[str, Any] | None = None
             seen_aids: set[str] = set()
             stop_paging = False
+            cursor_aid = clean_text(state.get("cursorAid"))
+            cursor_found = not cursor_aid
+            reached_boundary = False
+            next_begin = 0
             for page_number in range(max_pages):
-                begin = page_number * page_size
+                begin = next_begin
                 payload = request_account_articles(
                     base_url,
                     api_key,
@@ -113,10 +127,25 @@ def fetch_wechat(
                     page_size,
                     timeout,
                     begin=begin,
+                    max_response_bytes=max_response_bytes,
                 )
                 articles = payload.get("articles", [])
                 if not isinstance(articles, list):
                     raise RuntimeError("响应 articles 不是数组")
+                page = payload.get("page")
+                has_page_metadata = isinstance(page, dict)
+                if has_page_metadata:
+                    raw_next_begin = page.get("nextBegin")
+                    if raw_next_begin is None:
+                        reached_boundary = True
+                    else:
+                        try:
+                            parsed_next_begin = int(raw_next_begin)
+                        except (TypeError, ValueError) as exc:
+                            raise RuntimeError("响应 page.nextBegin 不是有效整数") from exc
+                        if parsed_next_begin <= begin:
+                            raise RuntimeError("响应 page.nextBegin 未向后推进")
+                        next_begin = parsed_next_begin
                 result.stats["fetchedArticles"] += len(articles)
                 if newest is None:
                     newest = next((article for article in articles if isinstance(article, dict) and clean_text(article.get("aid"))), None)
@@ -127,11 +156,13 @@ def fetch_wechat(
                     if not aid or aid in seen_aids:
                         continue
                     seen_aids.add(aid)
-                    if aid == state["cursorAid"]:
+                    if aid == cursor_aid:
+                        cursor_found = True
                         stop_paging = True
                         break
                     published_at = article_datetime(article)
                     if published_at and published_at < cutoff:
+                        reached_boundary = True
                         stop_paging = True
                         break
                     considered_articles += 1
@@ -139,10 +170,11 @@ def fetch_wechat(
                     if not title:
                         continue
                     tags, matched_terms = classify(title, config)
-                    if not tags:
-                        continue
-                    keyword_hits += 1
+                    if tags:
+                        keyword_hits += 1
                     status = article_status(article)
+                    summary = clean_summary(article.get("digest"))
+                    content = article_content_fields(article, now, summary)
                     account_items.append(make_item(
                         title=title,
                         url=clean_text(article.get("link")),
@@ -154,13 +186,28 @@ def fetch_wechat(
                         rank=None,
                         tags=tags,
                         matched_terms=matched_terms,
-                        summary=clean_summary(article.get("digest")),
+                        summary=summary,
+                        content_text=content["contentText"],
+                        content_html=content["contentHtml"],
+                        content_status=content["contentStatus"],
+                        content_fetched_at=content["contentFetchedAt"],
+                        content_hash=content["contentHash"],
+                        content_error=content["contentError"],
                         identity_key=aid,
                         external_id=aid,
                         source_status=status,
                     ))
-                if stop_paging or len(articles) < page_size:
+                # Compatibility fallback for collector versions that predate
+                # page metadata. Production pagination must use nextBegin
+                # because size counts publish groups, not flattened articles.
+                if not has_page_metadata and len(articles) < page_size:
+                    reached_boundary = True
+                elif not has_page_metadata:
+                    next_begin = begin + page_size
+                if stop_paging or reached_boundary:
                     break
+            if not reached_boundary and (not cursor_aid or not cursor_found):
+                raise RuntimeError("WECHAT_CURSOR_NOT_REACHED: increase maxPagesPerAccount and retry")
             result.items.extend(account_items)
             result.stats["consideredArticles"] += considered_articles
             result.stats["keywordHits"] += keyword_hits
@@ -188,9 +235,10 @@ def request_account_articles(
     timeout: int,
     *,
     begin: int = 0,
+    max_response_bytes: int = DEFAULT_COLLECTOR_MAX_RESPONSE_BYTES,
 ) -> dict[str, Any]:
     path = f"/api/internal/v1/collector/accounts/{quote(fakeid, safe='')}/articles"
-    url = f"{base_url}{path}?{urlencode({'begin': max(0, begin), 'size': size})}"
+    url = f"{base_url}{path}?{urlencode({'begin': max(0, begin), 'size': size, 'includeContent': 'true'})}"
     request = Request(
         url,
         headers={
@@ -202,13 +250,19 @@ def request_account_articles(
     for attempt in range(len(ARTICLE_RETRY_DELAYS) + 1):
         try:
             with urlopen(request, timeout=timeout) as response:
-                payload = json.loads(response.read().decode("utf-8", errors="replace"))
+                raw = response.read(max_response_bytes + 1)
+                if len(raw) > max_response_bytes:
+                    raise RuntimeError("collector response exceeds the configured byte limit")
+                payload = json.loads(raw.decode("utf-8", errors="replace"))
             break
         except HTTPError as exc:
             if exc.code in RETRYABLE_HTTP_CODES and attempt < len(ARTICLE_RETRY_DELAYS):
                 time.sleep(ARTICLE_RETRY_DELAYS[attempt])
                 continue
-            body = exc.read().decode("utf-8", errors="replace")
+            body = exc.read(MAX_COLLECTOR_ERROR_BYTES + 1)[:MAX_COLLECTOR_ERROR_BYTES].decode(
+                "utf-8",
+                errors="replace",
+            )
             try:
                 error_payload = json.loads(body)
                 error = error_payload.get("error", {}) if isinstance(error_payload, dict) else {}
@@ -266,3 +320,34 @@ def article_status(article: dict[str, Any]) -> str:
     except (TypeError, ValueError):
         pass
     return "active"
+
+
+def article_content_fields(article: dict[str, Any], now: datetime, summary: str) -> dict[str, str]:
+    content_text = first_article_text(article, "contentText", "content_text")
+    content_html = first_article_text(article, "contentHtml", "content_html")
+    if content_html:
+        extracted_text, content_html = extract_article_content(content_html)
+        if not content_text:
+            content_text = extracted_text
+    content_status = first_article_text(article, "contentStatus", "content_status")
+    if not content_status:
+        content_status = "available" if content_text else ("partial" if summary else "unavailable")
+    content_fetched_at = first_article_text(article, "contentFetchedAt", "content_fetched_at")
+    if not content_fetched_at and content_status != "pending":
+        content_fetched_at = format_dt(now)
+    return {
+        "contentText": content_text,
+        "contentHtml": content_html,
+        "contentStatus": content_status,
+        "contentFetchedAt": content_fetched_at,
+        "contentHash": first_article_text(article, "contentHash", "content_hash"),
+        "contentError": first_article_text(article, "contentError", "content_error"),
+    }
+
+
+def first_article_text(article: dict[str, Any], *keys: str) -> str:
+    for key in keys:
+        value = article.get(key)
+        if value not in (None, ""):
+            return str(value).strip()
+    return ""

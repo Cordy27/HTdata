@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -27,7 +28,7 @@ from .domain import (
     prepare_ai_candidates,
     sort_items,
 )
-from .sources import fetch_hotlists, fetch_rss
+from .sources import fetch_hotlists, fetch_rss, hydrate_article_content
 from .storage import (
     CloudBaseClient,
     check_cloudbase_schema,
@@ -35,6 +36,7 @@ from .storage import (
     load_cloud_briefs,
     load_cloud_items,
     load_cloud_items_by_ids,
+    load_cloud_items_missing_content,
     load_wechat_account_states,
     merge_prior_items,
     persist_cloudbase,
@@ -47,18 +49,28 @@ from .wechat import WechatFetchResult, fetch_wechat
 class SyncOptions:
     config_path: Path
     lookback_days: int | None = None
+    wechat_account_ids: tuple[str, ...] = ()
+    wechat_recovery_only: bool = False
+    content_backfill_only: bool = False
     check_schema: bool = False
     clear_briefs: bool = False
     force_brief_from_recent: bool = False
 
 
 def run_sync(options: SyncOptions) -> dict[str, Any]:
+    if options.wechat_recovery_only and not options.wechat_account_ids:
+        raise RuntimeError("wechatRecoveryOnly requires wechatAccountIds.")
+    if options.wechat_recovery_only and options.content_backfill_only:
+        raise RuntimeError("wechatRecoveryOnly and contentBackfillOnly cannot be combined.")
     issues: list[str] = []
     load_env_file(ROOT_DIR / ".env")
     config = read_json(options.config_path)
+    restrict_wechat_accounts(config, options.wechat_account_ids)
     settings = config.get("settings", {})
     now = datetime.now(SHANGHAI_TZ)
+    run_id = f"run_{now.strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8]}"
     lookback_days = int(options.lookback_days or settings.get("lookbackDays", 7))
+    retention_days = max(lookback_days, int(settings.get("retentionDays", 180)))
     settings["lookbackDays"] = lookback_days
     if options.lookback_days:
         for feed in config.get("rss", []):
@@ -79,17 +91,21 @@ def run_sync(options: SyncOptions) -> dict[str, Any]:
     if options.clear_briefs:
         clear_cloud_briefs(cloudbase)
 
-    cloud_items = load_cloud_items(cloudbase, storage_max_items * 3)
+    cloud_items = load_cloud_items(cloudbase, storage_max_items)
+    backfill_items = [] if (options.force_brief_from_recent or options.wechat_recovery_only) else load_cloud_items_missing_content(
+        cloudbase,
+        int(settings.get("contentMaxFetchPerRun", 200)),
+    )
     cloud_briefs = load_cloud_briefs(cloudbase, 3)
-    if options.force_brief_from_recent:
+    if options.force_brief_from_recent or options.content_backfill_only:
         hotlist_items = []
         rss_items = []
         wechat_result = WechatFetchResult()
     else:
         wechat_enabled = isinstance(config.get("wechat"), dict) and config["wechat"].get("enabled", False)
         wechat_states = load_wechat_account_states(cloudbase) if wechat_enabled else []
-        hotlist_items = fetch_hotlists(config, now, issues)
-        rss_items = fetch_rss(config, now, issues)
+        hotlist_items = [] if options.wechat_recovery_only else fetch_hotlists(config, now, issues)
+        rss_items = [] if options.wechat_recovery_only else fetch_rss(config, now, issues)
         wechat_result = fetch_wechat(config, now, wechat_states, issues)
     fetched_items = [*hotlist_items, *rss_items, *wechat_result.items]
     fetched_existing_items = (
@@ -100,28 +116,45 @@ def run_sync(options: SyncOptions) -> dict[str, Any]:
         if fetched_items
         else []
     )
-    prior_items = merge_prior_items(cloud_items, fetched_existing_items)
+    hydrated_ids = hydrate_article_content(
+        [*backfill_items, *rss_items, *wechat_result.items],
+        [*backfill_items, *fetched_existing_items],
+        config,
+        now,
+    )
+    prior_items = merge_prior_items(cloud_items, backfill_items, fetched_existing_items)
     prior_ids = {str(item.get("id")) for item in prior_items if item.get("id")}
     prior_latest = latest_item_time(prior_items)
     preserve_existing_ids = {str(item.get("id")) for item in fetched_existing_items if item.get("id")}
 
     new_items = [item for item in fetched_items if str(item.get("id") or "") not in prior_ids]
-    brief_items = new_items
+    public_new_items = [
+        item for item in new_items if item.get("sourceType") in {"RSS", "公众号"}
+    ]
+    for item in public_new_items:
+        item["firstSeenRunId"] = run_id
+    brief_items = [] if (options.wechat_recovery_only or options.content_backfill_only) else [
+        item for item in new_items if item.get("tags")
+    ]
     brief_window_start = prior_latest
     if options.force_brief_from_recent:
         recent_pool = merge_prior_items(prior_items, fetched_items)
-        brief_items = filter_recent_items(recent_pool, now, lookback_days)
+        brief_items = [
+            item for item in filter_recent_items(recent_pool, now, lookback_days)
+            if item.get("tags")
+        ]
         brief_window_start = now - timedelta(days=lookback_days)
     ai_candidates = prepare_ai_candidates(brief_items)
     deferred_failures = list(wechat_result.failures)
     brief = None
-    try:
-        brief = build_ai_brief(config, ai_candidates, now, brief_window_start, issues, required=require_ai)
-    except Exception as exc:
-        message = str(exc)
-        if message not in issues:
-            issues.append(message)
-        deferred_failures.append(message)
+    if not (options.wechat_recovery_only or options.content_backfill_only):
+        try:
+            brief = build_ai_brief(config, ai_candidates, now, brief_window_start, issues, required=require_ai)
+        except Exception as exc:
+            message = str(exc)
+            if message not in issues:
+                issues.append(message)
+            deferred_failures.append(message)
     if brief:
         apply_brief_scores(fetched_items, brief)
 
@@ -129,12 +162,32 @@ def run_sync(options: SyncOptions) -> dict[str, Any]:
         prior_items,
         fetched_items,
         now,
-        lookback_days,
+        retention_days,
         preserve_ids=preserve_existing_ids,
     )
     if brief:
         apply_brief_scores(merged_items, brief)
     merged_items = sort_items(merged_items)[:storage_max_items]
+    merged_by_id = {str(item.get("id")): item for item in merged_items if item.get("id")}
+    persist_ids = {
+        str(item.get("id")) for item in fetched_items if item.get("id")
+    } | hydrated_ids
+    brief_ids: set[str] = set()
+    if brief:
+        brief_ids = {
+            str(item.get("id")) for item in brief.get("items", [])
+            if isinstance(item, dict) and item.get("id")
+        }
+        persist_ids.update(brief_ids)
+        full_brief_items = load_cloud_items_by_ids(cloudbase, list(brief_ids)) if brief_ids else []
+        for full_item in full_brief_items:
+            item_id = str(full_item.get("id") or "")
+            scored = merged_by_id.get(item_id)
+            if scored:
+                full_item["aiScore"] = scored.get("aiScore")
+                full_item["aiReason"] = scored.get("aiReason", "")
+                merged_by_id[item_id] = full_item
+    items_to_persist = [merged_by_id[item_id] for item_id in persist_ids if item_id in merged_by_id]
     briefs = merge_briefs(cloud_briefs, brief)
 
     new_wechat_items = sum(1 for item in new_items if item.get("sourceType") == "公众号")
@@ -144,12 +197,14 @@ def run_sync(options: SyncOptions) -> dict[str, Any]:
         "wechat": {**wechat_result.stats, "newItems": new_wechat_items},
         "totalFetchedItems": len(fetched_items),
         "totalNewItems": len(new_items),
+        "publicNewItems": len(public_new_items),
         "aiCandidates": len(ai_candidates),
+        "persistedItems": len(items_to_persist),
         "issueCount": len(issues),
     }
     persistence_failures = persist_cloudbase(
         cloudbase,
-        merged_items,
+        items_to_persist,
         brief,
         now,
         len(fetched_items),
@@ -158,6 +213,11 @@ def run_sync(options: SyncOptions) -> dict[str, Any]:
         account_states=wechat_result.account_states,
         metrics=metrics,
         failures=deferred_failures,
+        total_item_count=len(merged_items),
+        retention_cutoff=now - timedelta(days=retention_days),
+        storage_max_items=storage_max_items,
+        run_id=run_id,
+        public_new_count=len(public_new_items),
     )
     deferred_failures.extend(persistence_failures)
     refreshed_briefs = load_cloud_briefs(cloudbase, 3)
@@ -170,6 +230,8 @@ def run_sync(options: SyncOptions) -> dict[str, Any]:
         "ok": not deferred_failures,
         "fetched": len(fetched_items),
         "newItems": len(new_items),
+        "publicNewItems": len(public_new_items),
+        "batchId": run_id if public_new_items else None,
         "items": len(merged_items),
         "briefs": len(briefs),
         "storage": "CloudBase",
@@ -177,6 +239,21 @@ def run_sync(options: SyncOptions) -> dict[str, Any]:
         "metrics": metrics,
         "deferredFailures": deferred_failures,
     }
+
+
+def restrict_wechat_accounts(config: dict[str, Any], account_ids: tuple[str, ...]) -> None:
+    requested = {str(account_id).strip() for account_id in account_ids if str(account_id).strip()}
+    if not requested:
+        return
+    wechat = config.get("wechat")
+    if not isinstance(wechat, dict):
+        raise RuntimeError("wechatAccountIds requires a configured WeChat source.")
+    accounts = [account for account in wechat.get("accounts", []) if isinstance(account, dict)]
+    available = {str(account.get("id") or "").strip() for account in accounts}
+    missing = sorted(requested - available)
+    if missing:
+        raise RuntimeError("Unknown WeChat account IDs: " + ", ".join(missing))
+    wechat["accounts"] = [account for account in accounts if str(account.get("id") or "").strip() in requested]
 
 
 def write_log(
