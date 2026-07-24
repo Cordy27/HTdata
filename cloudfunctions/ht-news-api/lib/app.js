@@ -11,7 +11,6 @@ const { rowMatches } = require('./search');
 const DOCUMENT_ROOT = path.resolve(__dirname, '..');
 const PUBLIC_DOCUMENTS = {
   '/openapi.yaml': { file: 'openapi.yaml', contentType: 'application/yaml; charset=utf-8' },
-  '/llms.txt': { file: 'llms.txt', contentType: 'text/plain; charset=utf-8' },
 };
 const PORTAL_DOCS_URL = 'https://cordy27.github.io/HTdata/docs/';
 

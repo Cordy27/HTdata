@@ -14,5 +14,6 @@
 - [x] 12. 增加批次字段、历史回填和 180 天运行记录清理
 - [x] 13. 修改同步链路生成 run_id 并标记公开首次入库新闻
 - [x] 14. 实现 GET /api/v1/news/increments、批次游标和错误契约
-- [x] 15. 更新 OpenAPI、llms.txt、门户 Markdown 和请求控制台
+- [x] 15. 更新 OpenAPI、门户 Markdown 和静态文档页面
 - [x] 16. 执行本地回归、CloudBase 迁移部署和线上端到端验收
+- [x] 17. 将门户技术文档改为多路径静态 HTML，并移除 llms.txt

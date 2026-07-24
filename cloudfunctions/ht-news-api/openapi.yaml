@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: Huatai RSS and WeChat News API
   version: 1.0.0
-  description: Read-only aggregated RSS and WeChat article metadata and content. It does not summarize or trigger collection. Human documentation is available at https://cordy27.github.io/HTdata/docs/ and the agent guide is available at /llms.txt.
+  description: Read-only aggregated RSS and WeChat article metadata and content. It does not summarize or trigger collection. Human-readable static documentation is available at https://cordy27.github.io/HTdata/docs/.
 servers:
   - url: https://test-4gcfvxy0640ef41a.service.tcloudbase.com/news-api
 externalDocs:
@@ -21,17 +21,6 @@ paths:
           description: OpenAPI YAML document.
           content:
             application/yaml:
-              schema: { type: string }
-  /llms.txt:
-    get:
-      security: []
-      operationId: getAgentGuide
-      summary: Download the concise API guide for agents.
-      responses:
-        '200':
-          description: Plain-text agent integration guide.
-          content:
-            text/plain:
               schema: { type: string }
   /health:
     get:

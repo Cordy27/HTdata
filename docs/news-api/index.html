@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="面向外部 Agent 的 RSS 与微信公众号新闻聚合查询接口，支持来源发现、关键词检索、正文读取与按批次取数。">
+  <meta name="robots" content="index,follow">
+  <title>News Api | 华泰互联网技术文档</title>
+  <link rel="stylesheet" href="../../css/styles.css">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div class="docs-shell">
+    <aside class="document-library" aria-label="技术文档目录">
+      <a class="portal-link" href="../../" aria-label="返回研究数据门户">
+        <span class="portal-mark brand-mark">HT</span>
+        <span class="portal-copy"><strong>华泰互联网组</strong><small>技术文档中心</small></span>
+      </a>
+      <div class="library-body">
+        <div class="library-heading"><span class="mono">DOCUMENTS</span><strong>技术文档</strong></div>
+        <nav class="document-nav" aria-label="文档列表">
+          <a class="document-link" href="../">文档目录</a>
+          <a class="document-link active" href="news-api/"><strong>News Api</strong><span>RSS + WECHAT / READ-ONLY API</span></a>
+        </nav>
+        <div class="library-foot">正文由仓库中的 Markdown 构建，页面无需运行脚本即可阅读。</div>
+      </div>
+    </aside>
+    <div class="docs-workspace">
+      <header class="docs-topbar">
+        <div class="docs-topbar-title"><span class="eyebrow">INTERNET RESEARCH WORKSPACE</span><strong>技术文档</strong></div>
+        <span class="docs-status"><i></i>Static reference</span>
+      </header>
+      <main class="document-main">
+        <header class="document-hero">
+          <p class="eyebrow">RSS + WECHAT / READ-ONLY API</p>
+          <h1>News Api</h1>
+          <p class="document-summary">面向外部 Agent 的 RSS 与微信公众号新闻聚合查询接口，支持来源发现、关键词检索、正文读取与按批次取数。</p>
+          <div class="document-meta"><span>STATIC HTML</span><span>MARKDOWN SOURCE</span></div>
+        </header>
+        <article class="document-article"><h2 id="_1">使用边界</h2>
+<p>News API 只提供已入库 RSS 和白名单微信公众号文章的数据读取。它不触发采集、不刷新来源、不生成摘要或日报，也不会返回热榜、采集会话、内部账号、游标原文或日志。</p>
+<h2 id="_2">基础地址与发现</h2>
+<p>服务地址：<code>https://test-4gcfvxy0640ef41a.service.tcloudbase.com/news-api</code></p>
+<ul>
+<li><a href="https://test-4gcfvxy0640ef41a.service.tcloudbase.com/news-api/openapi.yaml">OpenAPI 3.1</a></li>
+<li><a href="https://test-4gcfvxy0640ef41a.service.tcloudbase.com/news-api/health">Health check</a></li>
+</ul>
+<p><code>/health</code>、OpenAPI 和本门户静态文档可公开读取。所有数据接口必须使用服务端发放的 API Key。</p>
+<h2 id="_3">鉴权</h2>
+<p>在所有受保护请求中发送：</p>
+<pre><code class="language-http">Authorization: Bearer &lt;NEWS_API_KEY&gt;
+</code></pre>
+<p>将 Key 保存在 Agent 的密钥管理或环境变量中。不要写入源码、URL、浏览器存储、提示词或日志。页面中的调试控制台只在当前页面内存中使用输入的 Key。</p>
+<h2 id="agent">Agent 工作流</h2>
+<ol>
+<li>使用 <code>GET /api/v1/sources</code> 发现可用 RSS 与微信公众号来源。</li>
+<li>需要逐批处理新入库新闻时，先调用 <code>GET /api/v1/news/increments</code> 获取最新非空批次，再通过 <code>previousBatchId</code> 向前读取历史批次。</li>
+<li>简单查询使用 <code>GET /api/v1/news</code>；多关键词、多来源或复杂过滤使用 <code>POST /api/v1/news/search</code>。</li>
+<li>默认请求 <code>view=standard</code>。仅在任务确实需要正文时请求 <code>view=full</code>；只有明确需要时才设置 <code>includeHtml=true</code>。</li>
+<li>将 <code>data.page.nextCursor</code> 视为不透明值原样带回，并保持所有过滤条件和排序不变。增量批次翻页时必须同时固定 <code>batchId</code>。</li>
+<li>已知单篇 ID 使用详情接口；已知多个 ID 时才使用批量接口。</li>
+</ol>
+<h2 id="_4">接口目录</h2>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>权限</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td><code>/health</code></td>
+<td>Public</td>
+<td>健康检查</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/sources</code></td>
+<td>Bearer Key</td>
+<td>来源发现</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/news</code></td>
+<td>Bearer Key</td>
+<td>URL 参数检索</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/news/increments</code></td>
+<td>Bearer Key</td>
+<td>按抓取批次读取首次入库新闻</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/v1/news/search</code></td>
+<td>Bearer Key</td>
+<td>结构化检索</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/news/{id}</code></td>
+<td>Bearer Key</td>
+<td>单篇正文读取</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/v1/news/batch</code></td>
+<td>Bearer Key</td>
+<td>已知 ID 批量读取</td>
+</tr>
+</tbody>
+</table>
+<h2 id="_5">搜索</h2>
+<p><code>GET /api/v1/news</code> 支持 <code>q</code>、<code>keywords</code>、<code>keywordMode</code>、<code>phrase</code>、<code>sourceTypes</code>、<code>sourceIds</code>、<code>sourceNames</code>、<code>publishedFrom</code>、<code>publishedTo</code>、<code>changedAfter</code>、<code>minAiScore</code>、<code>sortField</code>、<code>sortDirection</code>、<code>limit</code>、<code>cursor</code>、<code>view</code> 和 <code>includeHtml</code>。</p>
+<p>关键词默认搜索标题、摘要和正文。<code>keywordMode</code> 支持 <code>any</code>、<code>all</code>、<code>phrase</code>；<code>phrase</code> 模式应使用 <code>phrase</code> 参数或以空格连接关键词。</p>
+<pre><code class="language-bash">curl --request GET \
+  'https://test-4gcfvxy0640ef41a.service.tcloudbase.com/news-api/api/v1/news?phrase=WAIC+具身智能&amp;keywordMode=phrase&amp;view=standard&amp;limit=30' \
+  --header 'Authorization: Bearer $NEWS_API_KEY'
+</code></pre>
+<p>复杂查询使用 <code>POST /api/v1/news/search</code>：</p>
+<pre><code class="language-json">{
+  &quot;keywords&quot;: [&quot;WAIC&quot;, &quot;具身智能&quot;],
+  &quot;keywordMode&quot;: &quot;any&quot;,
+  &quot;sourceTypes&quot;: [&quot;rss&quot;, &quot;wechat&quot;],
+  &quot;view&quot;: &quot;standard&quot;,
+  &quot;page&quot;: { &quot;limit&quot;: 30 }
+}
+</code></pre>
+<h2 id="_6">抓取批次增量</h2>
+<p>不提供 <code>batchId</code> 时，接口默认返回最近一个实际产生 RSS 或白名单公众号新增文章的批次：</p>
+<pre><code class="language-bash">curl --request GET \
+  'https://test-4gcfvxy0640ef41a.service.tcloudbase.com/news-api/api/v1/news/increments?view=standard&amp;limit=30' \
+  --header 'Authorization: Bearer $NEWS_API_KEY'
+</code></pre>
+<p>查询指定历史批次时传入响应中的 <code>data.batch.id</code> 或 <code>data.batch.previousBatchId</code>：</p>
+<pre><code class="language-bash">curl --request GET \
+  'https://test-4gcfvxy0640ef41a.service.tcloudbase.com/news-api/api/v1/news/increments?batchId=run_20260724090000_deadbeef&amp;view=full&amp;limit=20' \
+  --header 'Authorization: Bearer $NEWS_API_KEY'
+</code></pre>
+<p><code>data.batch</code> 包含 <code>id</code>、<code>runAt</code>、<code>newCount</code>、<code>status</code> 和 <code>previousBatchId</code>。<code>status=partial</code> 表示该轮存在部分来源失败，但返回的文章已经成功入库。零增量运行不会成为默认最新批次。</p>
+<p>批次内分页继续使用 <code>data.page.nextCursor</code>。后续请求必须同时传入当前 <code>data.batch.id</code> 作为 <code>batchId</code>，否则服务端拒绝游标请求。批次历史与新闻记录均保留 180 天。</p>
+<h2 id="_7">正文与批量读取</h2>
+<p>详情接口默认返回纯文本正文和 <code>contentStatus</code>。<code>includeHtml=true</code> 只在内容可用时返回已清洗的 <code>contentHtml</code>。</p>
+<p>批量接口按请求 ID 的顺序返回结果：</p>
+<pre><code class="language-json">{
+  &quot;ids&quot;: [&quot;article-id-1&quot;, &quot;article-id-2&quot;],
+  &quot;includeContent&quot;: true,
+  &quot;includeHtml&quot;: false,
+  &quot;view&quot;: &quot;full&quot;
+}
+</code></pre>
+<h2 id="_8">分页、视图与限制</h2>
+<ul>
+<li>普通搜索默认 30 条，<code>compact</code> 与 <code>standard</code> 最多 100 条。</li>
+<li><code>full</code> 搜索默认且最多 20 条；请求 HTML 时同样使用 <code>full</code>。</li>
+<li>纯元数据批量最多 100 条；返回正文最多 20 条；返回 HTML 最多 5 条。</li>
+<li>对宽泛的正文搜索应增加时间或来源限制。</li>
+<li>服务端始终限制为 RSS 和微信公众号数据范围。</li>
+</ul>
+<p>视图字段稳定：<code>compact</code> 用于扫描；<code>standard</code> 用于常规检索；<code>full</code> 返回 <code>contentText</code>。<code>contentHtml</code> 只在显式 <code>includeHtml=true</code> 时出现。</p>
+<h2 id="_9">内容状态与错误处理</h2>
+<p><code>contentStatus</code> 可能是 <code>available</code>、<code>partial</code>、<code>pending</code> 或 <code>unavailable</code>。后面三种是数据状态，不代表 API 调用失败。</p>
+<table>
+<thead>
+<tr>
+<th>Code</th>
+<th>处理方式</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>INVALID_ARGUMENT</code> / <code>INVALID_CURSOR</code></td>
+<td>修正参数或游标，不要原样重试。</td>
+</tr>
+<tr>
+<td><code>UNAUTHORIZED</code></td>
+<td>检查 Bearer Key。</td>
+</tr>
+<tr>
+<td><code>NEWS_NOT_FOUND</code></td>
+<td>文章不存在或不在允许的数据范围。</td>
+</tr>
+<tr>
+<td><code>BATCH_NOT_FOUND</code></td>
+<td>批次不存在、已过保留期或没有公开 RSS/公众号增量。</td>
+</tr>
+<tr>
+<td><code>QUERY_TOO_BROAD</code> / <code>RESPONSE_TOO_LARGE</code></td>
+<td>缩小时间、来源或条数，移除 HTML。</td>
+</tr>
+<tr>
+<td><code>DATABASE_UNAVAILABLE</code> / <code>INTERNAL_ERROR</code></td>
+<td>仅在 <code>retryable=true</code> 时指数退避重试。</td>
+</tr>
+</tbody>
+</table>
+<p>所有响应均使用 <code>ok</code>、<code>data</code> 或 <code>error</code>、<code>meta</code> 包装。<code>meta</code> 包含 <code>requestId</code>、<code>generatedAt</code> 和 <code>schemaVersion</code>；搜索响应额外包含 <code>data.page.nextCursor</code> 与 <code>hasMore</code>。</p></article>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

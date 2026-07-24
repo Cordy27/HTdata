@@ -7,10 +7,9 @@ News API 只提供已入库 RSS 和白名单微信公众号文章的数据读取
 服务地址：`https://test-4gcfvxy0640ef41a.service.tcloudbase.com/news-api`
 
 - [OpenAPI 3.1](https://test-4gcfvxy0640ef41a.service.tcloudbase.com/news-api/openapi.yaml)
-- [Agent guide (llms.txt)](https://test-4gcfvxy0640ef41a.service.tcloudbase.com/news-api/llms.txt)
 - [Health check](https://test-4gcfvxy0640ef41a.service.tcloudbase.com/news-api/health)
 
-`/health`、OpenAPI 和 Agent guide 可公开读取。所有数据接口必须使用服务端发放的 API Key。
+`/health`、OpenAPI 和本门户静态文档可公开读取。所有数据接口必须使用服务端发放的 API Key。
 
 ## 鉴权
 

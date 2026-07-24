@@ -140,11 +140,27 @@ pre,
 
 .document-nav button:hover,
 .document-nav button:focus-visible,
-.document-nav button.active {
+.document-nav button.active,
+.document-nav a:hover,
+.document-nav a:focus-visible,
+.document-nav a.active {
   color: #ffffff;
   background: rgba(10, 155, 220, 0.3);
   border-color: rgba(183, 214, 242, 0.42);
   outline: none;
+}
+
+.document-nav a {
+  display: block;
+  width: 100%;
+  min-height: 52px;
+  padding: 8px 12px;
+  color: rgba(237, 247, 255, 0.76);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  text-align: left;
+  text-decoration: none;
 }
 
 .document-nav strong,
@@ -371,6 +387,61 @@ h1 {
 .document-article th {
   color: var(--green-dark);
   background: #eaf4ff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.document-article a {
+  overflow-wrap: anywhere;
+}
+
+.document-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  max-width: 900px;
+  padding-top: 30px;
+}
+
+.document-card {
+  display: block;
+  min-height: 210px;
+  padding: 22px;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  text-decoration: none;
+  transition: border-color 0.18s ease, transform 0.18s ease;
+}
+
+.document-card:hover,
+.document-card:focus-visible {
+  border-color: var(--green);
+  outline: none;
+  transform: translateY(-2px);
+}
+
+.document-card h2 {
+  margin: 12px 0 10px;
+  color: var(--ink);
+  font-size: 22px;
+  line-height: 1.3;
+}
+
+.document-card p {
+  min-height: 72px;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.document-card-link {
+  display: inline-block;
+  margin-top: 18px;
+  color: var(--green-dark);
+  font-family: Consolas, "SFMono-Regular", "Liberation Mono", monospace;
   font-size: 12px;
   font-weight: 700;
 }

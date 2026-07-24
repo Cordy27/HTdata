@@ -60,7 +60,7 @@ test('legacy CloudBase documentation routes redirect to the portal page', async 
   }
 }));
 
-test('machine-readable documentation routes are public', async () => withServer(async (base) => {
+test('the OpenAPI documentation route is public', async () => withServer(async (base) => {
 
   const openapi = await fetch(`${base}/openapi.yaml`);
   assert.equal(openapi.status, 200);
@@ -70,23 +70,15 @@ test('machine-readable documentation routes are public', async () => withServer(
   assert.match(openapiText, /\/api\/v1\/news\/increments/);
   assert.match(openapiText, /BATCH_NOT_FOUND/);
 
-  const agentGuide = await fetch(`${base}/llms.txt`);
-  assert.equal(agentGuide.status, 200);
-  assert.match(agentGuide.headers.get('content-type'), /^text\/plain/);
-  const agentGuideText = await agentGuide.text();
-  assert.match(agentGuideText, /GET \/api\/v1\/sources/);
-  assert.match(agentGuideText, /GET \/api\/v1\/news\/increments/);
 }));
 
 test('public documentation and health routes only match root or function prefix paths', async () => withServer(async (base) => {
   assert.equal((await fetch(`${base}/news-api/docs`, { redirect: 'manual' })).status, 302);
   assert.equal((await fetch(`${base}/news-api/openapi.yaml`)).status, 200);
-  assert.equal((await fetch(`${base}/news-api/llms.txt`)).status, 200);
   assert.equal((await fetch(`${base}/news-api/health`)).status, 200);
 
   assert.equal((await fetch(`${base}/api/v1/news/docs`)).status, 401);
   assert.equal((await fetch(`${base}/api/v1/news/openapi.yaml`)).status, 401);
-  assert.equal((await fetch(`${base}/api/v1/news/llms.txt`)).status, 401);
   assert.equal((await fetch(`${base}/api/v1/news/health`)).status, 401);
 }));
 

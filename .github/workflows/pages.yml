@@ -44,13 +44,16 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: python -m pip install openpyxl
+        run: python -m pip install openpyxl markdown
 
       - name: Generate access config
         run: python tools/sync_access.py
 
       - name: Generate portal data
         run: python tools/sync_data.py
+
+      - name: Build static technical documents
+        run: python tools/build_docs.py
 
       - name: Check news database schema
         if: ${{ github.event_name == 'workflow_dispatch' && (inputs.refresh_news == 'true' || inputs.force_news_brief == 'true') }}
