@@ -57,12 +57,16 @@ def convert_markdown(source: str) -> str:
     return converter.convert(body)
 
 
-def navigation(documents: list[dict[str, str]], active_slug: str | None = None) -> str:
+def navigation(
+    documents: list[dict[str, str]],
+    active_slug: str | None = None,
+    href_prefix: str = "",
+) -> str:
     links = []
     for document in documents:
         active = " active" if document["slug"] == active_slug else ""
         links.append(
-            f'<a class="document-link{active}" href="{html.escape(document["slug"] + "/")}">'
+            f'<a class="document-link{active}" href="{html.escape(href_prefix + document["slug"] + "/")}">'
             f'<strong>{html.escape(document["title"])}</strong>'
             f'<span>{html.escape(document["kicker"])}</span></a>'
         )
@@ -93,7 +97,7 @@ def page_shell(document: dict[str, str], documents: list[dict[str, str]], body: 
         <div class="library-heading"><span class="mono">DOCUMENTS</span><strong>技术文档</strong></div>
         <nav class="document-nav" aria-label="文档列表">
           <a class="document-link" href="../">文档目录</a>
-          {navigation(documents, slug)}
+          {navigation(documents, slug, "../")}
         </nav>
         <div class="library-foot">正文由仓库中的 Markdown 构建，页面无需运行脚本即可阅读。</div>
       </div>
