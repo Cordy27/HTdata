@@ -3,38 +3,30 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="华泰互联网组新闻信源配置后台">
+  <meta name="description" content="&#21326;&#27888;&#20114;&#32852;&#32593;&#32452;&#26032;&#38395;&#20449;&#28304;&#37197;&#32622;&#21518;&#21488;">
   <meta name="robots" content="noindex,nofollow">
-  <title>新闻信源配置 | 华泰互联网组</title>
-  <script>
-    (function () {
-      var segments = window.location.pathname.split('/').filter(Boolean);
-      var base = window.location.hostname.endsWith('.github.io') && segments.length ? '/' + segments[0] + '/' : '/';
-      window.HT_PUBLIC_BASE = base;
-      document.write('<base href="' + base + '">');
-    })();
-  </script>
+  <title>&#26032;&#38395;&#20449;&#28304;&#37197;&#32622; | &#21326;&#27888;&#20114;&#32852;&#32593;&#32452;</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="css/styles.css">
-  <link rel="stylesheet" href="css/admin-news-sources.css">
+  <link rel="stylesheet" href="../../css/styles.css">
+  <link rel="stylesheet" href="../../css/admin-news-sources.css">
 </head>
 <body class="admin-body">
   <div class="admin-shell">
-    <aside class="admin-rail" aria-label="新闻信源配置">
-      <a class="admin-brand" href="./" aria-label="新闻信源配置首页">
+    <aside class="admin-rail" aria-label="&#26032;&#38395;&#20449;&#28304;&#37197;&#32622;">
+      <a class="admin-brand" href="./" aria-label="&#26032;&#38395;&#20449;&#28304;&#37197;&#32622;&#39318;&#39029;">
         <span class="brand-mark">HT</span>
-        <span><strong>华泰互联网组</strong><small>新闻信源配置</small></span>
+        <span><strong>&#21326;&#27888;&#20114;&#32852;&#32593;&#32452;</strong><small>&#26032;&#38395;&#20449;&#28304;&#37197;&#32622;</small></span>
       </a>
       <div class="admin-rail-body">
         <p class="admin-rail-kicker">OPERATION CONSOLE</p>
-        <nav class="admin-nav" aria-label="配置操作">
-          <a class="active" href="#editor"><i data-lucide="sliders-horizontal"></i><span>当前配置</span></a>
-          <a href="#versions"><i data-lucide="history"></i><span>版本记录</span></a>
+        <nav class="admin-nav" aria-label="&#37197;&#32622;&#25805;&#20316;">
+          <a class="active" href="#editor"><i data-lucide="sliders-horizontal"></i><span>&#24403;&#21069;&#37197;&#32622;</span></a>
+          <a href="#versions"><i data-lucide="history"></i><span>&#29256;&#26412;&#35760;&#24405;</span></a>
         </nav>
       </div>
       <div class="admin-rail-foot">
-        <span class="session-indicator" id="sessionIndicator"><i></i>未登录</span>
-        <button class="rail-button" id="logoutButton" type="button" hidden><i data-lucide="log-out"></i><span>退出会话</span></button>
+        <span class="session-indicator" id="sessionIndicator"><i></i>&#26410;&#30331;&#24405;</span>
+        <button class="rail-button" id="logoutButton" type="button" hidden><i data-lucide="log-out"></i><span>&#36864;&#20986;&#20250;&#35805;</span></button>
       </div>
     </aside>
 
@@ -42,23 +34,23 @@
       <header class="admin-topbar">
         <div>
           <p class="eyebrow">NEWS OPERATIONS</p>
-          <h1>新闻信源配置</h1>
+          <h1>&#26032;&#38395;&#20449;&#28304;&#37197;&#32622;</h1>
         </div>
-        <a class="portal-return" href="./" aria-label="返回门户"><i data-lucide="arrow-left"></i><span>返回门户</span></a>
+        <a class="portal-return" href="./" aria-label="&#36820;&#22238;&#38376;&#25143;"><i data-lucide="arrow-left"></i><span>&#36820;&#22238;&#38376;&#25143;</span></a>
       </header>
 
       <section class="login-view" id="loginView" aria-labelledby="loginTitle">
         <div class="login-panel">
           <p class="panel-kicker">ADMINISTRATOR ACCESS</p>
-          <h2 id="loginTitle">管理员登录</h2>
-          <p>登录后可管理 RSS、热榜和公众号白名单。发布的新版本会在下一次新闻抓取任务启动时生效。</p>
+          <h2 id="loginTitle">&#31649;&#29702;&#21592;&#30331;&#24405;</h2>
+          <p>&#30331;&#24405;&#21518;&#21487;&#31649;&#29702; RSS&#12289;&#28909;&#27036;&#21644;&#20844;&#20247;&#21495;&#30333;&#21517;&#21333;&#12290;&#21457;&#24067;&#30340;&#26032;&#29256;&#26412;&#20250;&#22312;&#19979;&#19968;&#27425;&#26032;&#38395;&#25235;&#21462;&#20219;&#21153;&#21551;&#21160;&#26102;&#29983;&#25928;&#12290;</p>
           <form id="loginForm" novalidate>
-            <label for="passwordInput">管理员密码</label>
+            <label for="passwordInput">&#31649;&#29702;&#21592;&#23494;&#30721;</label>
             <div class="password-row">
               <input id="passwordInput" name="password" type="password" autocomplete="current-password" maxlength="256" required>
-              <button class="icon-button" id="passwordToggle" type="button" title="显示或隐藏密码" aria-label="显示或隐藏密码"><i data-lucide="eye"></i></button>
+              <button class="icon-button" id="passwordToggle" type="button" title="&#26174;&#31034;&#25110;&#38544;&#34255;&#23494;&#30721;" aria-label="&#26174;&#31034;&#25110;&#38544;&#34255;&#23494;&#30721;"><i data-lucide="eye"></i></button>
             </div>
-            <button class="primary-button login-submit" id="loginButton" type="submit"><i data-lucide="lock-keyhole"></i><span>登录</span></button>
+            <button class="primary-button login-submit" id="loginButton" type="submit"><i data-lucide="lock-keyhole"></i><span>&#30331;&#24405;</span></button>
           </form>
           <p class="form-message" id="loginMessage" role="status"></p>
         </div>
@@ -67,33 +59,33 @@
       <section class="admin-view" id="adminView" hidden>
         <div class="operating-note">
           <i data-lucide="clock-3"></i>
-          <div><strong>发布后下一次抓取生效</strong><span>当前运行中的任务不受影响；历史版本可载入后再次发布。</span></div>
+          <div><strong>&#21457;&#24067;&#21518;&#19979;&#19968;&#27425;&#25235;&#21462;&#29983;&#25928;</strong><span>&#24403;&#21069;&#36816;&#34892;&#20013;&#30340;&#20219;&#21153;&#19981;&#21463;&#24433;&#21709;&#65307;&#21382;&#21490;&#29256;&#26412;&#21487;&#36733;&#20837;&#21518;&#20877;&#27425;&#21457;&#24067;&#12290;</span></div>
         </div>
 
-        <section class="summary-grid" aria-label="当前配置摘要">
-          <div class="summary-cell"><span>当前版本</span><strong id="currentVersion">--</strong></div>
-          <div class="summary-cell"><span>发布时间</span><strong id="currentPublishedAt">--</strong></div>
-          <div class="summary-cell"><span>启用 RSS</span><strong id="rssCount">--</strong></div>
-          <div class="summary-cell"><span>启用公众号</span><strong id="wechatCount">--</strong></div>
+        <section class="summary-grid" aria-label="&#24403;&#21069;&#37197;&#32622;&#25688;&#35201;">
+          <div class="summary-cell"><span>&#24403;&#21069;&#29256;&#26412;</span><strong id="currentVersion">--</strong></div>
+          <div class="summary-cell"><span>&#21457;&#24067;&#26102;&#38388;</span><strong id="currentPublishedAt">--</strong></div>
+          <div class="summary-cell"><span>&#21551;&#29992; RSS</span><strong id="rssCount">--</strong></div>
+          <div class="summary-cell"><span>&#21551;&#29992;&#20844;&#20247;&#21495;</span><strong id="wechatCount">--</strong></div>
         </section>
 
         <section class="admin-panel" id="editor">
           <div class="admin-panel-head">
             <div>
               <p class="panel-kicker">CONFIGURATION JSON</p>
-              <h2>配置编辑器</h2>
+              <h2>&#37197;&#32622;&#32534;&#36753;&#22120;</h2>
             </div>
             <div class="editor-actions">
-              <button class="ghost-button" id="reloadButton" type="button" title="重新加载已发布版本"><i data-lucide="refresh-cw"></i><span>重新加载</span></button>
-              <button class="ghost-button" id="formatButton" type="button" title="格式化 JSON"><i data-lucide="braces"></i><span>格式化</span></button>
-              <button class="ghost-button" id="validateButton" type="button" title="检查 JSON 格式"><i data-lucide="check-check"></i><span>检查格式</span></button>
+              <button class="ghost-button" id="reloadButton" type="button" title="&#37325;&#26032;&#21152;&#36733;&#24050;&#21457;&#24067;&#29256;&#26412;"><i data-lucide="refresh-cw"></i><span>&#37325;&#26032;&#21152;&#36733;</span></button>
+              <button class="ghost-button" id="formatButton" type="button" title="&#26684;&#24335;&#21270; JSON"><i data-lucide="braces"></i><span>&#26684;&#24335;&#21270;</span></button>
+              <button class="ghost-button" id="validateButton" type="button" title="&#26816;&#26597; JSON &#26684;&#24335;"><i data-lucide="check-check"></i><span>&#26816;&#26597;&#26684;&#24335;</span></button>
             </div>
           </div>
-          <p class="panel-description">修改完成后填写变更说明并发布。服务端会复核来源 ID、HTTPS 地址、正文允许域名和公众号 fakeid。</p>
-          <textarea id="configEditor" class="config-editor" spellcheck="false" aria-label="新闻信源配置 JSON" placeholder="加载中..."></textarea>
+          <p class="panel-description">&#20462;&#25913;&#23436;&#25104;&#21518;&#22635;&#20889;&#21464;&#26356;&#35828;&#26126;&#24182;&#21457;&#24067;&#12290;&#26381;&#21153;&#31471;&#20250;&#22797;&#26680;&#26469;&#28304; ID&#12289;HTTPS &#22320;&#22336;&#12289;&#27491;&#25991;&#20801;&#35768;&#22495;&#21517;&#21644;&#20844;&#20247;&#21495; fakeid&#12290;</p>
+          <textarea id="configEditor" class="config-editor" spellcheck="false" aria-label="&#26032;&#38395;&#20449;&#28304;&#37197;&#32622; JSON" placeholder="&#21152;&#36733;&#20013;..."></textarea>
           <div class="editor-foot">
-            <p class="editor-status" id="editorStatus" role="status">等待加载配置。</p>
-            <span class="editor-count" id="editorCount">0 字符</span>
+            <p class="editor-status" id="editorStatus" role="status">&#31561;&#24453;&#21152;&#36733;&#37197;&#32622;&#12290;</p>
+            <span class="editor-count" id="editorCount">0 &#23383;&#31526;</span>
           </div>
         </section>
 
@@ -101,14 +93,14 @@
           <div class="admin-panel-head">
             <div>
               <p class="panel-kicker">PUBLISH VERSION</p>
-              <h2>发布新版本</h2>
+              <h2>&#21457;&#24067;&#26032;&#29256;&#26412;</h2>
             </div>
           </div>
           <div class="publish-row">
-            <label class="change-note-label" for="changeNote">变更说明
-              <input id="changeNote" maxlength="500" placeholder="例如：新增行业信源并下调正文抓取并发">
+            <label class="change-note-label" for="changeNote">&#21464;&#26356;&#35828;&#26126;
+              <input id="changeNote" maxlength="500" placeholder="&#20363;&#22914;&#65306;&#26032;&#22686;&#34892;&#19994;&#20449;&#28304;&#24182;&#19979;&#35843;&#27491;&#25991;&#25235;&#21462;&#24182;&#21457;">
             </label>
-            <button class="primary-button publish-button" id="publishButton" type="button"><i data-lucide="upload"></i><span>发布并下次生效</span></button>
+            <button class="primary-button publish-button" id="publishButton" type="button"><i data-lucide="upload"></i><span>&#21457;&#24067;&#24182;&#19979;&#27425;&#29983;&#25928;</span></button>
           </div>
           <p class="form-message" id="publishMessage" role="status"></p>
         </section>
@@ -117,18 +109,18 @@
           <div class="admin-panel-head">
             <div>
               <p class="panel-kicker">VERSION HISTORY</p>
-              <h2>版本记录</h2>
+              <h2>&#29256;&#26412;&#35760;&#24405;</h2>
             </div>
-            <button class="ghost-button" id="refreshVersionsButton" type="button"><i data-lucide="refresh-cw"></i><span>刷新记录</span></button>
+            <button class="ghost-button" id="refreshVersionsButton" type="button"><i data-lucide="refresh-cw"></i><span>&#21047;&#26032;&#35760;&#24405;</span></button>
           </div>
-          <div class="table-wrap"><table class="version-table"><thead><tr><th>发布时间</th><th>版本</th><th>变更说明</th><th>操作</th></tr></thead><tbody id="versionsBody"><tr><td colspan="4" class="empty-table">尚未加载版本记录。</td></tr></tbody></table></div>
+          <div class="table-wrap"><table class="version-table"><thead><tr><th>&#21457;&#24067;&#26102;&#38388;</th><th>&#29256;&#26412;</th><th>&#21464;&#26356;&#35828;&#26126;</th><th>&#25805;&#20316;</th></tr></thead><tbody id="versionsBody"><tr><td colspan="4" class="empty-table">&#23578;&#26410;&#21152;&#36733;&#29256;&#26412;&#35760;&#24405;&#12290;</td></tr></tbody></table></div>
         </section>
       </section>
     </main>
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="vendor/lucide.min.js"></script>
-  <script src="js/admin-news-sources.js"></script>
+  <script src="../../vendor/lucide.min.js"></script>
+  <script src="../../js/admin-news-sources.js"></script>
 </body>
 </html>
