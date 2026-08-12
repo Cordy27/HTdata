@@ -17,6 +17,9 @@ const PORTAL_DOCS_URL = 'https://cordy27.github.io/HTdata/docs/';
 const DEFAULT_CORS_ORIGINS = ['https://cordy27.github.io'];
 
 function corsHeaders(request) {
+  // CloudBase's HTTP gateway supplies CORS in production. Writing it again here
+  // produces a comma-joined Access-Control-Allow-Origin value that browsers reject.
+  if (process.env.NEWS_API_CORS_HANDLED_BY_GATEWAY === 'true') return {};
   const origin = String(request.headers.origin || '').trim();
   const allowedOrigins = String(process.env.NEWS_API_CORS_ORIGINS || DEFAULT_CORS_ORIGINS.join(','))
     .split(',').map((value) => value.trim()).filter(Boolean);
