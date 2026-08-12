@@ -9,9 +9,9 @@ const { normalizeQuery } = require('../lib/query');
 const { rowMatches } = require('../lib/search');
 
 const rows = [{
-  id: 'abc123', title: 'AI Agent 发布', url: 'https://example.com/1', source_id: 'feed',
-  source_name: 'Example', source_type: 'RSS', summary: '摘要', content_text: '完整正文包含大模型',
-  content_html: '<p>完整正文</p>', content_status: 'available', tags_json: '["AI"]',
+  id: 'abc123', title: 'AI Agent 鍙戝竷', url: 'https://example.com/1', source_id: 'feed',
+  source_name: 'Example', source_type: 'RSS', summary: '鎽樿', content_text: '瀹屾暣姝ｆ枃鍖呭惈澶фā鍨?,
+  content_html: '<p>瀹屾暣姝ｆ枃</p>', content_status: 'available', tags_json: '["AI"]',
   matched_terms_json: '["Agent"]', published_at: '2026-07-16T01:00:00.000Z',
   effective_published_at: '2026-07-16T01:00:00.000Z', first_seen_run_id: 'run_20260716090000_deadbeef',
   updated_at: '2026-07-16T02:00:00.000Z', ai_score: 80,
@@ -33,10 +33,22 @@ function fakeRepository() {
   };
 }
 
+function fakeAdmin() {
+  return {
+    login(password) { if (password !== 'admin-password') { const error = new Error('bad'); error.status = 401; error.code = 'UNAUTHORIZED'; throw error; } return { token: 'admin-token', expiresAt: '2026-07-16T01:00:00.000Z' }; },
+    authorize(token) { if (token !== 'admin-token') { const error = new Error('bad'); error.status = 401; error.code = 'UNAUTHORIZED'; throw error; } },
+    async latest() { return { id: '00000000-0000-4000-8000-000000000001', config_json: '{"settings":{}}', config_sha256: 'abc', change_note: 'latest', published_at: '2026-07-16 01:00:00' }; },
+    async list() { return []; },
+    async get() { return null; },
+    async publish() { return { id: '00000000-0000-4000-8000-000000000002', config_sha256: 'def', change_note: 'published', published_at: '2026-07-16 01:00:00' }; },
+  };
+}
+
 async function withServer(callback) {
   const handler = createRequestHandler({
     repository: fakeRepository(),
     authenticate: createBearerAuthenticator({ hashes: [sha256('secret')] }),
+    admin: fakeAdmin(),
     cursorSecret: 'cursor-test-secret',
     maxResponseBytes: 5_000_000,
   });
@@ -50,6 +62,14 @@ test('health is public and API routes require a bearer key', async () => withSer
   assert.equal((await fetch(`${base}/health`)).status, 200);
   assert.equal((await fetch(`${base}/api/v1/news`)).status, 401);
   assert.equal((await fetch(`${base}/api/v1/news`, { headers: { Authorization: 'Bearer wrong' } })).status, 401);
+}));
+
+test('administrator routes issue a session then allow source configuration reads', async () => withServer(async (base) => {
+  const login = await fetch(`${base}/admin/v1/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: 'admin-password' }) });
+  assert.equal(login.status, 200);
+  const response = await fetch(`${base}/admin/v1/news-sources`, { headers: { Authorization: 'Bearer admin-token' } });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).data.version.changeNote, 'latest');
 }));
 
 test('legacy CloudBase documentation routes redirect to the portal page', async () => withServer(async (base) => {
@@ -101,10 +121,10 @@ test('portal origin receives CORS headers while other origins remain blocked', a
 }));
 
 test('search returns matching RSS content and never exposes html by default', async () => withServer(async (base) => {
-  const response = await fetch(`${base}/api/v1/news?q=大模型&view=full`, { headers: { Authorization: 'Bearer secret' } });
+  const response = await fetch(`${base}/api/v1/news?q=澶фā鍨?view=full`, { headers: { Authorization: 'Bearer secret' } });
   assert.equal(response.status, 200);
   const payload = await response.json();
-  assert.equal(payload.data.items[0].contentText, '完整正文包含大模型');
+  assert.equal(payload.data.items[0].contentText, '瀹屾暣姝ｆ枃鍖呭惈澶фā鍨?);
   assert.equal(payload.data.items[0].contentHtml, undefined);
 }));
 
@@ -179,7 +199,7 @@ test('response byte limit returns a stable 413 error', async () => {
   const server = http.createServer(handler);
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   try {
-    const response = await fetch(`http://127.0.0.1:${server.address().port}/api/v1/news?q=大模型&view=full`, {
+    const response = await fetch(`http://127.0.0.1:${server.address().port}/api/v1/news?q=澶фā鍨?view=full`, {
       headers: { Authorization: 'Bearer secret' },
     });
     assert.equal(response.status, 413);
@@ -190,10 +210,10 @@ test('response byte limit returns a stable 413 error', async () => {
 });
 
 test('keyword modes search title summary and content', () => {
-  assert.equal(rowMatches(rows[0], normalizeQuery({ keywords: ['不存在', '大模型'], keywordMode: 'any' })), true);
-  assert.equal(rowMatches(rows[0], normalizeQuery({ keywords: ['Agent', '大模型'], keywordMode: 'all' })), true);
-  assert.equal(rowMatches(rows[0], normalizeQuery({ keywords: ['Agent', '不存在'], keywordMode: 'all' })), false);
-  assert.equal(rowMatches(rows[0], normalizeQuery({ phrase: '完整正文', keywordMode: 'phrase' })), true);
+  assert.equal(rowMatches(rows[0], normalizeQuery({ keywords: ['涓嶅瓨鍦?, '澶фā鍨?], keywordMode: 'any' })), true);
+  assert.equal(rowMatches(rows[0], normalizeQuery({ keywords: ['Agent', '澶фā鍨?], keywordMode: 'all' })), true);
+  assert.equal(rowMatches(rows[0], normalizeQuery({ keywords: ['Agent', '涓嶅瓨鍦?], keywordMode: 'all' })), false);
+  assert.equal(rowMatches(rows[0], normalizeQuery({ phrase: '瀹屾暣姝ｆ枃', keywordMode: 'phrase' })), true);
 });
 
 test('full view defaults to its 20 item response limit', () => {

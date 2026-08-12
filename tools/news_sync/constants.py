@@ -13,6 +13,7 @@ NEWS_ITEMS_TABLE = "ht_news_items"
 NEWS_BRIEFS_TABLE = "ht_news_briefs"
 NEWS_RUNS_TABLE = "ht_news_sync_runs"
 NEWS_WECHAT_ACCOUNTS_TABLE = "ht_news_wechat_accounts"
+NEWS_SOURCE_CONFIG_VERSIONS_TABLE = "ht_news_source_config_versions"
 PROMPT_VERSION = "research-flash-v3"
 
 

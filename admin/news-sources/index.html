@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="鍗庢嘲浜掕仈缃戠粍鏂伴椈淇℃簮閰嶇疆鍚庡彴">
+  <meta name="robots" content="noindex,nofollow">
+  <title>鏂伴椈淇℃簮閰嶇疆 | 鍗庢嘲浜掕仈缃戠粍</title>
+  <script>
+    (function () {
+      var segments = window.location.pathname.split('/').filter(Boolean);
+      var base = window.location.hostname.endsWith('.github.io') && segments.length ? '/' + segments[0] + '/' : '/';
+      window.HT_PUBLIC_BASE = base;
+      document.write('<base href="' + base + '">');
+    })();
+  </script>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/admin-news-sources.css">
+</head>
+<body class="admin-body">
+  <div class="admin-shell">
+    <aside class="admin-rail" aria-label="鏂伴椈淇℃簮閰嶇疆">
+      <a class="admin-brand" href="./" aria-label="鏂伴椈淇℃簮閰嶇疆棣栭〉">
+        <span class="brand-mark">HT</span>
+        <span><strong>鍗庢嘲浜掕仈缃戠粍</strong><small>鏂伴椈淇℃簮閰嶇疆</small></span>
+      </a>
+      <div class="admin-rail-body">
+        <p class="admin-rail-kicker">OPERATION CONSOLE</p>
+        <nav class="admin-nav" aria-label="閰嶇疆鎿嶄綔">
+          <a class="active" href="#editor"><i data-lucide="sliders-horizontal"></i><span>褰撳墠閰嶇疆</span></a>
+          <a href="#versions"><i data-lucide="history"></i><span>鐗堟湰璁板綍</span></a>
+        </nav>
+      </div>
+      <div class="admin-rail-foot">
+        <span class="session-indicator" id="sessionIndicator"><i></i>鏈櫥褰?/span>
+        <button class="rail-button" id="logoutButton" type="button" hidden><i data-lucide="log-out"></i><span>閫€鍑轰細璇?/span></button>
+      </div>
+    </aside>
+
+    <main class="admin-workspace">
+      <header class="admin-topbar">
+        <div>
+          <p class="eyebrow">NEWS OPERATIONS</p>
+          <h1>鏂伴椈淇℃簮閰嶇疆</h1>
+        </div>
+        <a class="portal-return" href="./" aria-label="杩斿洖闂ㄦ埛"><i data-lucide="arrow-left"></i><span>杩斿洖闂ㄦ埛</span></a>
+      </header>
+
+      <section class="login-view" id="loginView" aria-labelledby="loginTitle">
+        <div class="login-panel">
+          <p class="panel-kicker">ADMINISTRATOR ACCESS</p>
+          <h2 id="loginTitle">绠＄悊鍛樼櫥褰?/h2>
+          <p>鐧诲綍鍚庡彲绠＄悊 RSS銆佺儹姒滃拰鍏紬鍙风櫧鍚嶅崟銆傚彂甯冪殑鏂扮増鏈細鍦ㄤ笅涓€娆℃柊闂绘姄鍙栦换鍔″惎鍔ㄦ椂鐢熸晥銆?/p>
+          <form id="loginForm" novalidate>
+            <label for="passwordInput">绠＄悊鍛樺瘑鐮?/label>
+            <div class="password-row">
+              <input id="passwordInput" name="password" type="password" autocomplete="current-password" maxlength="256" required>
+              <button class="icon-button" id="passwordToggle" type="button" title="鏄剧ず鎴栭殣钘忓瘑鐮? aria-label="鏄剧ず鎴栭殣钘忓瘑鐮?><i data-lucide="eye"></i></button>
+            </div>
+            <button class="primary-button login-submit" id="loginButton" type="submit"><i data-lucide="lock-keyhole"></i><span>鐧诲綍</span></button>
+          </form>
+          <p class="form-message" id="loginMessage" role="status"></p>
+        </div>
+      </section>
+
+      <section class="admin-view" id="adminView" hidden>
+        <div class="operating-note">
+          <i data-lucide="clock-3"></i>
+          <div><strong>鍙戝竷鍚庝笅涓€娆℃姄鍙栫敓鏁?/strong><span>褰撳墠杩愯涓殑浠诲姟涓嶅彈褰卞搷锛涘巻鍙茬増鏈彲杞藉叆鍚庡啀娆″彂甯冦€?/span></div>
+        </div>
+
+        <section class="summary-grid" aria-label="褰撳墠閰嶇疆鎽樿">
+          <div class="summary-cell"><span>褰撳墠鐗堟湰</span><strong id="currentVersion">--</strong></div>
+          <div class="summary-cell"><span>鍙戝竷鏃堕棿</span><strong id="currentPublishedAt">--</strong></div>
+          <div class="summary-cell"><span>鍚敤 RSS</span><strong id="rssCount">--</strong></div>
+          <div class="summary-cell"><span>鍚敤鍏紬鍙?/span><strong id="wechatCount">--</strong></div>
+        </section>
+
+        <section class="admin-panel" id="editor">
+          <div class="admin-panel-head">
+            <div>
+              <p class="panel-kicker">CONFIGURATION JSON</p>
+              <h2>閰嶇疆缂栬緫鍣?/h2>
+            </div>
+            <div class="editor-actions">
+              <button class="ghost-button" id="reloadButton" type="button" title="閲嶆柊鍔犺浇宸插彂甯冪増鏈?><i data-lucide="refresh-cw"></i><span>閲嶆柊鍔犺浇</span></button>
+              <button class="ghost-button" id="formatButton" type="button" title="鏍煎紡鍖?JSON"><i data-lucide="braces"></i><span>鏍煎紡鍖?/span></button>
+              <button class="ghost-button" id="validateButton" type="button" title="妫€鏌?JSON 鏍煎紡"><i data-lucide="check-check"></i><span>妫€鏌ユ牸寮?/span></button>
+            </div>
+          </div>
+          <p class="panel-description">淇敼瀹屾垚鍚庡～鍐欏彉鏇磋鏄庡苟鍙戝竷銆傛湇鍔＄浼氬鏍告潵婧?ID銆丠TTPS 鍦板潃銆佹鏂囧厑璁稿煙鍚嶅拰鍏紬鍙?fakeid銆?/p>
+          <textarea id="configEditor" class="config-editor" spellcheck="false" aria-label="鏂伴椈淇℃簮閰嶇疆 JSON" placeholder="鍔犺浇涓?.."></textarea>
+          <div class="editor-foot">
+            <p class="editor-status" id="editorStatus" role="status">绛夊緟鍔犺浇閰嶇疆銆?/p>
+            <span class="editor-count" id="editorCount">0 瀛楃</span>
+          </div>
+        </section>
+
+        <section class="admin-panel publish-panel">
+          <div class="admin-panel-head">
+            <div>
+              <p class="panel-kicker">PUBLISH VERSION</p>
+              <h2>鍙戝竷鏂扮増鏈?/h2>
+            </div>
+          </div>
+          <div class="publish-row">
+            <label class="change-note-label" for="changeNote">鍙樻洿璇存槑
+              <input id="changeNote" maxlength="500" placeholder="渚嬪锛氭柊澧炶涓氫俊婧愬苟涓嬭皟姝ｆ枃鎶撳彇骞跺彂">
+            </label>
+            <button class="primary-button publish-button" id="publishButton" type="button"><i data-lucide="upload"></i><span>鍙戝竷骞朵笅娆＄敓鏁?/span></button>
+          </div>
+          <p class="form-message" id="publishMessage" role="status"></p>
+        </section>
+
+        <section class="admin-panel" id="versions">
+          <div class="admin-panel-head">
+            <div>
+              <p class="panel-kicker">VERSION HISTORY</p>
+              <h2>鐗堟湰璁板綍</h2>
+            </div>
+            <button class="ghost-button" id="refreshVersionsButton" type="button"><i data-lucide="refresh-cw"></i><span>鍒锋柊璁板綍</span></button>
+          </div>
+          <div class="table-wrap"><table class="version-table"><thead><tr><th>鍙戝竷鏃堕棿</th><th>鐗堟湰</th><th>鍙樻洿璇存槑</th><th>鎿嶄綔</th></tr></thead><tbody id="versionsBody"><tr><td colspan="4" class="empty-table">灏氭湭鍔犺浇鐗堟湰璁板綍銆?/td></tr></tbody></table></div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="vendor/lucide.min.js"></script>
+  <script src="js/admin-news-sources.js"></script>
+</body>
+</html>

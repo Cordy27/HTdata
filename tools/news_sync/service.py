@@ -15,6 +15,7 @@ from .constants import (
     NEWS_BRIEFS_TABLE,
     NEWS_ITEMS_TABLE,
     NEWS_RUNS_TABLE,
+    NEWS_SOURCE_CONFIG_VERSIONS_TABLE,
     NEWS_WECHAT_ACCOUNTS_TABLE,
     ROOT_DIR,
     SHANGHAI_TZ,
@@ -37,6 +38,7 @@ from .storage import (
     load_cloud_items,
     load_cloud_items_by_ids,
     load_cloud_items_missing_content,
+    load_published_source_config,
     load_wechat_account_states,
     merge_prior_items,
     persist_cloudbase,
@@ -65,10 +67,32 @@ def run_sync(options: SyncOptions) -> dict[str, Any]:
     issues: list[str] = []
     load_env_file(ROOT_DIR / ".env")
     config = read_json(options.config_path)
-    restrict_wechat_accounts(config, options.wechat_account_ids)
-    settings = config.get("settings", {})
+    bootstrap_settings = config.get("settings", {})
     now = datetime.now(SHANGHAI_TZ)
     run_id = f"run_{now.strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8]}"
+    cloudbase = CloudBaseClient.from_env(bootstrap_settings)
+    if options.check_schema:
+        check_cloudbase_schema(cloudbase)
+        return {
+            "ok": True,
+            "checked": [
+                NEWS_ITEMS_TABLE,
+                NEWS_BRIEFS_TABLE,
+                NEWS_RUNS_TABLE,
+                NEWS_WECHAT_ACCOUNTS_TABLE,
+                NEWS_SOURCE_CONFIG_VERSIONS_TABLE,
+            ],
+        }
+
+    try:
+        runtime_config = load_published_source_config(cloudbase)
+    except (AttributeError, RuntimeError) as exc:
+        runtime_config = None
+        issues.append(f"Runtime source configuration unavailable; using bundled default: {exc}")
+    if runtime_config:
+        config = runtime_config
+    restrict_wechat_accounts(config, options.wechat_account_ids)
+    settings = config.get("settings", {})
     lookback_days = int(options.lookback_days or settings.get("lookbackDays", 7))
     retention_days = max(lookback_days, int(settings.get("retentionDays", 180)))
     settings["lookbackDays"] = lookback_days
@@ -79,14 +103,6 @@ def run_sync(options: SyncOptions) -> dict[str, Any]:
     max_items = int(settings.get("maxItems", 180))
     storage_max_items = max(max_items, int(settings.get("storageMaxItems", max_items)))
     require_ai = is_ai_required()
-
-    cloudbase = CloudBaseClient.from_env(settings)
-    if options.check_schema:
-        check_cloudbase_schema(cloudbase)
-        return {
-            "ok": True,
-            "checked": [NEWS_ITEMS_TABLE, NEWS_BRIEFS_TABLE, NEWS_RUNS_TABLE, NEWS_WECHAT_ACCOUNTS_TABLE],
-        }
 
     if options.clear_briefs:
         clear_cloud_briefs(cloudbase)
@@ -129,7 +145,7 @@ def run_sync(options: SyncOptions) -> dict[str, Any]:
 
     new_items = [item for item in fetched_items if str(item.get("id") or "") not in prior_ids]
     public_new_items = [
-        item for item in new_items if item.get("sourceType") in {"RSS", "公众号"}
+        item for item in new_items if item.get("sourceType") in {"RSS", "鍏紬鍙?}
     ]
     for item in public_new_items:
         item["firstSeenRunId"] = run_id
@@ -190,7 +206,7 @@ def run_sync(options: SyncOptions) -> dict[str, Any]:
     items_to_persist = [merged_by_id[item_id] for item_id in persist_ids if item_id in merged_by_id]
     briefs = merge_briefs(cloud_briefs, brief)
 
-    new_wechat_items = sum(1 for item in new_items if item.get("sourceType") == "公众号")
+    new_wechat_items = sum(1 for item in new_items if item.get("sourceType") == "鍏紬鍙?)
     metrics = {
         "hotlistItems": len(hotlist_items),
         "rssItems": len(rss_items),

@@ -94,11 +94,16 @@ function requestMeta(requestId) {
   return { requestId, generatedAt: new Date().toISOString(), schemaVersion: '1' };
 }
 
+function bearerToken(request) {
+  const match = String(request.headers.authorization || '').match(/^Bearer\s+([^\s]+)$/i);
+  return match ? match[1] : '';
+}
+
 function validateId(id) {
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) throw new ApiError(400, 'INVALID_ARGUMENT', 'The news ID is invalid.');
 }
 
-function createRequestHandler({ repository, authenticate, cursorSecret, maxResponseBytes = 5_000_000 }) {
+function createRequestHandler({ repository, authenticate, cursorSecret, admin = null, maxResponseBytes = 5_000_000 }) {
   return async function handler(request, response) {
     const requestId = `req_${crypto.randomUUID().replaceAll('-', '')}`;
     const started = Date.now();
@@ -113,6 +118,36 @@ function createRequestHandler({ repository, authenticate, cursorSecret, maxRespo
       if (request.method === 'GET' && document) return sendDocument(response, document[1], headers);
       if (request.method === 'GET' && matchesPublicPath(path, '/health')) {
         return reply(200, { ok: true, data: { service: 'ht-news-api', status: 'ok' }, meta: requestMeta(requestId) });
+      }
+
+      if (path.includes('/admin/v1/')) {
+        if (!admin) throw new ApiError(503, 'ADMIN_UNAVAILABLE', 'The news-source administrator is not configured.');
+        if (request.method === 'POST' && path.endsWith('/admin/v1/login')) {
+          const body = await readJson(request);
+          const password = String(body.password || '');
+          if (!password || password.length > 256) throw new ApiError(400, 'INVALID_ARGUMENT', 'A valid administrator password is required.');
+          return reply(200, { ok: true, data: admin.login(password), meta: requestMeta(requestId) });
+        }
+        admin.authorize(bearerToken(request));
+        if (request.method === 'GET' && path.endsWith('/admin/v1/news-sources')) {
+          const latest = await admin.latest();
+          return reply(200, { ok: true, data: { version: latest && { id: latest.id, sha256: latest.config_sha256, changeNote: latest.change_note, publishedAt: latest.published_at }, config: latest ? JSON.parse(latest.config_json) : null }, meta: requestMeta(requestId) });
+        }
+        if (request.method === 'GET' && path.endsWith('/admin/v1/news-sources/versions')) {
+          return reply(200, { ok: true, data: { versions: await admin.list() }, meta: requestMeta(requestId) });
+        }
+        const versionMatch = path.match(/\/admin\/v1\/news-sources\/versions\/([0-9a-f-]{36})$/i);
+        if (request.method === 'GET' && versionMatch) {
+          const version = await admin.get(versionMatch[1]);
+          if (!version) throw new ApiError(404, 'VERSION_NOT_FOUND', 'The requested configuration version does not exist.');
+          return reply(200, { ok: true, data: { version: { id: version.id, sha256: version.config_sha256, changeNote: version.change_note, publishedAt: version.published_at }, config: JSON.parse(version.config_json) }, meta: requestMeta(requestId) });
+        }
+        if (request.method === 'POST' && path.endsWith('/admin/v1/news-sources/publish')) {
+          const body = await readJson(request);
+          const version = await admin.publish(body.config, body.changeNote);
+          return reply(201, { ok: true, data: { version: { id: version.id, sha256: version.config_sha256, changeNote: version.change_note, publishedAt: version.published_at } }, meta: requestMeta(requestId) });
+        }
+        throw new ApiError(404, 'NOT_FOUND', 'The requested administrator route does not exist.');
       }
       authenticate(request);
 

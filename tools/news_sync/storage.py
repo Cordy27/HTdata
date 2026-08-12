@@ -11,7 +11,13 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
-from .constants import NEWS_BRIEFS_TABLE, NEWS_ITEMS_TABLE, NEWS_RUNS_TABLE, NEWS_WECHAT_ACCOUNTS_TABLE
+from .constants import (
+    NEWS_BRIEFS_TABLE,
+    NEWS_ITEMS_TABLE,
+    NEWS_RUNS_TABLE,
+    NEWS_SOURCE_CONFIG_VERSIONS_TABLE,
+    NEWS_WECHAT_ACCOUNTS_TABLE,
+)
 from .domain import brief_to_db_row, db_row_to_brief, db_row_to_item, item_to_db_row, sort_briefs
 from .utils import chunked, clean_text, display_dt, format_dt, nullable_dt, unique_list
 
@@ -23,6 +29,49 @@ NEWS_ITEM_METADATA_SELECT = (
     "ai_score,ai_reason,created_at,updated_at"
 )
 NEWS_ITEM_BACKFILL_SELECT = f"{NEWS_ITEM_METADATA_SELECT},content_text,content_html"
+DEFAULT_NEWS_ITEM_MAX_BYTES = 1_500_000
+
+
+def _truncate_utf8(value: Any, maximum_bytes: int) -> str:
+    encoded = str(value or "").encode("utf-8")
+    if len(encoded) <= maximum_bytes:
+        return str(value or "")
+    return encoded[:maximum_bytes].decode("utf-8", errors="ignore")
+
+
+def _serialized_bytes(row: dict[str, Any]) -> int:
+    return len(json.dumps(row, ensure_ascii=False).encode("utf-8"))
+
+
+def _fit_row_to_bytes(row: dict[str, Any], maximum_bytes: int) -> dict[str, Any]:
+    """Keep one news row below the gateway limit without dropping metadata."""
+    fitted = dict(row)
+    if _serialized_bytes(fitted) <= maximum_bytes:
+        return fitted
+
+    fitted["content_status"] = "partial"
+    existing_error = str(fitted.get("content_error") or "").strip()
+    fitted["content_error"] = existing_error or "CONTENT_TRUNCATED_FOR_STORAGE"
+
+    for field in ("content_html", "content_text"):
+        value = str(fitted.get(field) or "")
+        if not value:
+            continue
+        encoded = value.encode("utf-8")
+        low, high = 0, len(encoded)
+        while low < high:
+            middle = (low + high + 1) // 2
+            candidate = dict(fitted)
+            candidate[field] = _truncate_utf8(value, middle)
+            if _serialized_bytes(candidate) <= maximum_bytes:
+                low = middle
+            else:
+                high = middle - 1
+        fitted[field] = _truncate_utf8(value, low)
+        if _serialized_bytes(fitted) <= maximum_bytes:
+            return fitted
+
+    raise RuntimeError("news item metadata exceeds the CloudBase write limit")
 
 
 class CloudBaseClient:
@@ -41,9 +90,9 @@ class CloudBaseClient:
             or os.environ.get("CLOUDBASE_TOKEN")
         )
         if not env_id and not token:
-            raise RuntimeError("CloudBase 未配置：请设置 CLOUDBASE_ENV_ID 与 CLOUDBASE_API_KEY。")
+            raise RuntimeError("CloudBase 鏈厤缃細璇疯缃?CLOUDBASE_ENV_ID 涓?CLOUDBASE_API_KEY銆?)
         if not env_id or not token:
-            raise RuntimeError("CloudBase 环境 ID 或访问 token 缺失。")
+            raise RuntimeError("CloudBase 鐜 ID 鎴栬闂?token 缂哄け銆?)
         return cls(env_id, token, int(settings.get("timeoutSeconds", 12)) + 8)
 
     def get(self, table: str, query: dict[str, Any]) -> list[dict[str, Any]]:
@@ -97,9 +146,32 @@ def check_cloudbase_schema(client: CloudBaseClient) -> None:
         NEWS_BRIEFS_TABLE: "id,run_at,window_start,window_end,candidate_count,selected_count,title,summary,items_json,prompt_version,model,raw_response",
         NEWS_RUNS_TABLE: "id,run_at,fetched_count,item_count,new_count,public_new_count,issue_count,status,metrics_json,issues_json",
         NEWS_WECHAT_ACCOUNTS_TABLE: "id,display_name,fakeid,enabled,cursor_aid,cursor_published_at,last_success_at,last_error",
+        NEWS_SOURCE_CONFIG_VERSIONS_TABLE: "id,status,config_json,config_sha256,published_at,change_note",
     }
     for table, select in checks.items():
         client.get(table, {"select": select, "limit": "1"})
+
+
+def load_published_source_config(client: CloudBaseClient) -> dict[str, Any] | None:
+    """Return the most recently published runtime source configuration.
+
+    The checked-in JSON remains the bootstrap fallback. Invalid database values
+    are deliberately ignored so a corrupt historical row cannot stop RSS and
+    hotlist collection.
+    """
+    rows = client.get(NEWS_SOURCE_CONFIG_VERSIONS_TABLE, {
+        "select": "id,config_json,config_sha256,published_at",
+        "status": "eq.published",
+        "order": "published_at.desc,id.desc",
+        "limit": "1",
+    })
+    if not rows:
+        return None
+    try:
+        parsed = json.loads(str(rows[0].get("config_json") or ""))
+    except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
 
 
 def load_cloud_items(client: CloudBaseClient, limit: int) -> list[dict[str, Any]]:
@@ -114,7 +186,7 @@ def load_cloud_items(client: CloudBaseClient, limit: int) -> list[dict[str, Any]
 def load_cloud_items_missing_content(client: CloudBaseClient, limit: int) -> list[dict[str, Any]]:
     rows = client.get(NEWS_ITEMS_TABLE, {
         "select": NEWS_ITEM_BACKFILL_SELECT,
-        "source_type": "in.(RSS,公众号)",
+        "source_type": "in.(RSS,鍏紬鍙?",
         "content_status": "in.(pending,partial,unavailable)",
         "or": "(content_text.is.null,content_text.eq.)",
         "order": "content_fetched_at.asc,first_seen_at.desc",
@@ -203,7 +275,7 @@ def persist_cloudbase(
             for chunk in chunked([wechat_state_to_db(state) for state in account_states], 50):
                 client.post(NEWS_WECHAT_ACCOUNTS_TABLE, chunk, prefer="resolution=merge-duplicates,return=minimal")
         except Exception as exc:
-            message = f"公众号同步状态保存失败：{exc}"
+            message = f"鍏紬鍙峰悓姝ョ姸鎬佷繚瀛樺け璐ワ細{exc}"
             warnings.append(message)
             persistence_failures.append(message)
 
@@ -234,21 +306,26 @@ def chunk_rows_by_bytes(
     rows: list[dict[str, Any]],
     *,
     max_rows: int = 50,
-    max_bytes: int = 4_000_000,
+    max_bytes: int = DEFAULT_NEWS_ITEM_MAX_BYTES,
 ) -> list[list[dict[str, Any]]]:
     chunks: list[list[dict[str, Any]]] = []
     current: list[dict[str, Any]] = []
     current_bytes = 2
     for row in rows:
-        row_bytes = len(json.dumps(row, ensure_ascii=False).encode("utf-8")) + 1
-        if row_bytes > max_bytes:
-            raise RuntimeError("news item payload exceeds the CloudBase write limit")
-        if current and (len(current) >= max_rows or current_bytes + row_bytes > max_bytes):
+        row = _fit_row_to_bytes(row, max_bytes)
+        row_bytes = _serialized_bytes(row)
+        # The serialized list adds one comma between adjacent rows. Count it
+        # so the request body, rather than only the individual rows, stays
+        # within the CloudBase gateway limit.
+        # json.dumps defaults to ", " between list items, so the separator is
+        # two UTF-8 bytes in the actual request body.
+        separator_bytes = 2 if current else 0
+        if current and (len(current) >= max_rows or current_bytes + separator_bytes + row_bytes > max_bytes):
             chunks.append(current)
             current = []
             current_bytes = 2
         current.append(row)
-        current_bytes += row_bytes
+        current_bytes += separator_bytes + row_bytes
     if current:
         chunks.append(current)
     return chunks

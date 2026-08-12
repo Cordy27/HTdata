@@ -58,8 +58,8 @@ def make_item(
     published = format_dt(published_at) if published_at else ""
     raw_content_text = str(content_text or "").strip()
     raw_content_html = str(content_html or "").strip()
-    normalized_content_text, text_truncated = truncate_utf8(raw_content_text, 800_000)
-    normalized_content_html, html_truncated = truncate_utf8(raw_content_html, 2_500_000)
+    normalized_content_text, text_truncated = truncate_utf8(raw_content_text, 600_000)
+    normalized_content_html, html_truncated = truncate_utf8(raw_content_html, 900_000)
     content_truncated = text_truncated or html_truncated
     normalized_content_hash = clean_text(content_hash)
     if normalized_content_text and (content_truncated or not normalized_content_hash):
@@ -286,7 +286,7 @@ def make_flash_title(item: dict[str, Any]) -> str:
         clean_text(item.get("fact"))
         or clean_text(item.get("title"))
         or clean_text(item.get("reason"))
-        or "增量资讯"
+        or "澧為噺璧勮"
     )
     return truncate_text(text, 32)
 
@@ -297,13 +297,13 @@ def make_flash_text(item: dict[str, Any]) -> str:
     reason = clean_text(item.get("reason"))
     source = clean_text(item.get("sourceName"))
     if fact and viewpoint:
-        fact = fact.rstrip("。；;,.， ")
-        viewpoint = viewpoint.rstrip("。；;,.， ")
-        text = f"{fact}；文中观点称，{viewpoint}"
+        fact = fact.rstrip("銆傦紱;,.锛?")
+        viewpoint = viewpoint.rstrip("銆傦紱;,.锛?")
+        text = f"{fact}锛涙枃涓鐐圭О锛寋viewpoint}"
     else:
-        text = fact or reason or "本条为本轮增量新闻中筛选出的重点信息。"
+        text = fact or reason or "鏈潯涓烘湰杞閲忔柊闂讳腑绛涢€夊嚭鐨勯噸鐐逛俊鎭€?
     if source and source not in text:
-        text = f"{source}：{text}"
+        text = f"{source}锛歿text}"
     return truncate_text(text, 90)
 
 

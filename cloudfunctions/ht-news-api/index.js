@@ -4,12 +4,14 @@ const http = require('node:http');
 const { createRequestHandler } = require('./lib/app');
 const { createAuthenticatorFromEnv } = require('./lib/auth');
 const { CloudBaseNewsRepository } = require('./lib/repository');
+const { createAdminServiceFromEnv } = require('./lib/admin');
 
 function buildRuntime() {
   const cursorSecret = process.env.NEWS_CURSOR_SECRET;
   if (!cursorSecret) throw new Error('NEWS_CURSOR_SECRET must be configured.');
   return {
     repository: CloudBaseNewsRepository.fromEnv(),
+    admin: createAdminServiceFromEnv(),
     authenticate: createAuthenticatorFromEnv(),
     cursorSecret,
     maxResponseBytes: Number(process.env.NEWS_API_MAX_RESPONSE_BYTES || 5_000_000),

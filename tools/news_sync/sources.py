@@ -35,13 +35,13 @@ def fetch_hotlists(config: dict[str, Any], now: datetime, warnings: list[str]) -
             continue
         url = f"{api_url}?id={quote(source_id)}&latest"
         try:
-            payload = fetch_json(url, timeout)
+            payload = fetch_json(url, timeout, safe_public=True, allow_any_public=True)
             raw_items = payload.get("items") if isinstance(payload, dict) else []
             if not isinstance(raw_items, list):
-                warnings.append(f"{source_name} 返回结构不符合预期")
+                warnings.append(f"{source_name} 杩斿洖缁撴瀯涓嶇鍚堥鏈?)
                 continue
         except Exception as exc:
-            warnings.append(f"{source_name} 抓取失败：{exc}")
+            warnings.append(f"{source_name} 鎶撳彇澶辫触锛歿exc}")
             continue
 
         expected_domain = str(source.get("expectedDomain") or "")
@@ -58,7 +58,7 @@ def fetch_hotlists(config: dict[str, Any], now: datetime, warnings: list[str]) -
                 continue
             tags, matched_terms = classify(title, config)
             if not tags and top_rank_limit and rank <= top_rank_limit:
-                tags = ["财经要闻"]
+                tags = ["璐㈢粡瑕侀椈"]
                 matched_terms = []
             if not tags:
                 continue
@@ -67,7 +67,7 @@ def fetch_hotlists(config: dict[str, Any], now: datetime, warnings: list[str]) -
                 url=source_url,
                 source_id=source_id,
                 source_name=source_name,
-                source_type="热榜",
+                source_type="鐑",
                 collected_at=now,
                 published_at=None,
                 rank=rank,
@@ -93,10 +93,10 @@ def fetch_rss(config: dict[str, Any], now: datetime, warnings: list[str]) -> lis
         if not feed_id or not feed_url:
             continue
         try:
-            xml_text = fetch_text(feed_url, timeout)
+            xml_text = fetch_text(feed_url, timeout, safe_public=True, allow_any_public=True)
             entries = parse_feed_entries(xml_text)
         except Exception as exc:
-            warnings.append(f"{feed_name} RSS 抓取失败：{exc}")
+            warnings.append(f"{feed_name} RSS 鎶撳彇澶辫触锛歿exc}")
             continue
         max_age = int(feed.get("maxAgeDays", default_age))
         cutoff = now - timedelta(days=max_age)
@@ -147,16 +147,16 @@ def hydrate_article_content(
         return set()
     updated_ids: set[str] = set()
     timeout = int(settings.get("contentTimeoutSeconds") or settings.get("timeoutSeconds", 12))
-    max_download_bytes = int(settings.get("contentMaxDownloadBytes", 2_000_000))
-    max_text_bytes = int(settings.get("contentMaxTextBytes", 800_000))
-    max_html_bytes = int(settings.get("contentMaxHtmlBytes", 2_500_000))
-    concurrency = max(1, min(12, int(settings.get("contentFetchConcurrency", 8))))
-    maximum = max(1, int(settings.get("contentMaxFetchPerRun", 200)))
+    max_download_bytes = int(settings.get("contentMaxDownloadBytes", 4_000_000))
+    max_text_bytes = int(settings.get("contentMaxTextBytes", 600_000))
+    max_html_bytes = int(settings.get("contentMaxHtmlBytes", 900_000))
+    concurrency = max(1, min(12, int(settings.get("contentFetchConcurrency", 2))))
+    maximum = max(1, int(settings.get("contentMaxFetchPerRun", 80)))
     retry_hours = max(1, int(settings.get("contentRetryHours", 24)))
     existing_by_id = {clean_text(item.get("id")): item for item in existing_items if item.get("id")}
     references_by_id: dict[str, list[dict[str, Any]]] = {}
     for item in items:
-        if item.get("sourceType") not in {"RSS", "公众号"} or item.get("contentText"):
+        if item.get("sourceType") not in {"RSS", "鍏紬鍙?} or item.get("contentText"):
             continue
         item_id = clean_text(item.get("id"))
         references_by_id.setdefault(item_id or f"url:{clean_text(item.get('url'))}", []).append(item)
@@ -237,7 +237,7 @@ def hydrate_article_content(
 
 
 def article_content_allowed_domains(item: dict[str, Any], config: dict[str, Any]) -> list[str]:
-    if item.get("sourceType") == "公众号":
+    if item.get("sourceType") == "鍏紬鍙?:
         return ["mp.weixin.qq.com"]
     source_id = clean_text(item.get("sourceId"))
     feed = next((entry for entry in config.get("rss", []) if clean_text(entry.get("id")) == source_id), {})
@@ -270,14 +270,29 @@ def safe_article_source_url(
     return True
 
 
-def fetch_json(url: str, timeout: int) -> dict[str, Any]:
-    text = fetch_text(url, timeout)
+def fetch_json(
+    url: str,
+    timeout: int,
+    *,
+    max_bytes: int = 5_000_000,
+    safe_public: bool = False,
+    allowed_domains: list[str] | None = None,
+    allow_any_public: bool = False,
+) -> dict[str, Any]:
+    text = fetch_text(
+        url,
+        timeout,
+        max_bytes=max_bytes,
+        safe_public=safe_public,
+        allowed_domains=allowed_domains,
+        allow_any_public=allow_any_public,
+    )
     payload = json.loads(text)
     if not isinstance(payload, dict):
-        raise ValueError("响应不是 JSON 对象")
+        raise ValueError("鍝嶅簲涓嶆槸 JSON 瀵硅薄")
     status = payload.get("status")
     if status and status not in {"success", "cache"}:
-        raise ValueError(f"API 状态异常：{status}")
+        raise ValueError(f"API 鐘舵€佸紓甯革細{status}")
     return payload
 
 
