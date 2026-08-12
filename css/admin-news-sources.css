@@ -181,6 +181,11 @@
   padding: 26px;
 }
 
+.login-view[hidden],
+.admin-view[hidden] {
+  display: none !important;
+}
+
 .login-view {
   min-height: calc(100vh - 85px);
   display: grid;
