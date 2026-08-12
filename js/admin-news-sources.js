@@ -36,8 +36,8 @@
   async function login(event) {
     event.preventDefault();
     var password = nodes.password.value;
-    if (!password) return setMessage(nodes.loginMessage, '璇疯緭鍏ョ鐞嗗憳瀵嗙爜銆?, true);
-    setBusy(nodes.loginButton, true, '鐧诲綍涓?);
+    if (!password) return setMessage(nodes.loginMessage, '请输入管理员密码。', true);
+    setBusy(nodes.loginButton, true, '登录中');
     setMessage(nodes.loginMessage, '');
     try {
       var payload = await request('/admin/v1/login', { method: 'POST', body: { password: password }, auth: false });
@@ -46,19 +46,19 @@
       nodes.password.value = '';
       showAdmin();
       await Promise.all([loadCurrent(false), loadVersions()]);
-      notify('绠＄悊鍛樹細璇濆凡寤虹珛銆?);
+      notify('管理员会话已建立。');
     } catch (error) {
-      setMessage(nodes.loginMessage, error.message || '鐧诲綍澶辫触锛岃绋嶅悗閲嶈瘯銆?, true);
+      setMessage(nodes.loginMessage, error.message || '登录失败，请稍后重试。', true);
     } finally {
-      setBusy(nodes.loginButton, false, '鐧诲綍');
+      setBusy(nodes.loginButton, false, '登录');
     }
   }
 
   function togglePassword() {
     var visible = nodes.password.type === 'text';
     nodes.password.type = visible ? 'password' : 'text';
-    nodes.passwordToggle.setAttribute('title', visible ? '鏄剧ず瀵嗙爜' : '闅愯棌瀵嗙爜');
-    nodes.passwordToggle.setAttribute('aria-label', visible ? '鏄剧ず瀵嗙爜' : '闅愯棌瀵嗙爜');
+    nodes.passwordToggle.setAttribute('title', visible ? '显示密码' : '隐藏密码');
+    nodes.passwordToggle.setAttribute('aria-label', visible ? '显示密码' : '隐藏密码');
     nodes.passwordToggle.innerHTML = '<i data-lucide="' + (visible ? 'eye' : 'eye-off') + '"></i>';
     if (window.lucide) window.lucide.createIcons({ nodes: [nodes.passwordToggle] });
   }
@@ -68,7 +68,7 @@
     nodes.adminView.hidden = false;
     nodes.logoutButton.hidden = false;
     nodes.sessionIndicator.classList.add('is-active');
-    nodes.sessionIndicator.innerHTML = '<i></i>浼氳瘽鏈夋晥';
+    nodes.sessionIndicator.innerHTML = '<i></i>会话有效';
   }
 
   function logout(message) {
@@ -80,38 +80,38 @@
     nodes.loginView.hidden = false;
     nodes.logoutButton.hidden = true;
     nodes.sessionIndicator.classList.remove('is-active');
-    nodes.sessionIndicator.innerHTML = '<i></i>鏈櫥褰?;
+    nodes.sessionIndicator.innerHTML = '<i></i>未登录';
     nodes.editor.value = '';
-    nodes.versionsBody.innerHTML = '<tr><td colspan="4" class="empty-table">灏氭湭鍔犺浇鐗堟湰璁板綍銆?/td></tr>';
+    nodes.versionsBody.innerHTML = '<tr><td colspan="4" class="empty-table">尚未加载版本记录。</td></tr>';
     if (message) setMessage(nodes.loginMessage, message, true);
     updateEditorCount();
   }
 
   async function loadCurrent(showToast) {
-    setBusy(nodes.reloadButton, true, '鍔犺浇涓?);
+    setBusy(nodes.reloadButton, true, '加载中');
     try {
       var payload = await request('/admin/v1/news-sources');
       var data = payload.data || {};
       state.current = data;
       if (data.config) {
         nodes.editor.value = JSON.stringify(data.config, null, 2);
-        setEditorStatus('宸插姞杞藉綋鍓嶅彂甯冪増鏈€?, false, true);
+        setEditorStatus('已加载当前发布版本。', false, true);
       } else {
         nodes.editor.value = '';
-        setEditorStatus('灏氭棤宸插彂甯冪殑杩愯鎬侀厤缃紝璇峰厛浠庨粯璁ら厤缃垱寤洪涓増鏈€?, true);
+        setEditorStatus('尚无已发布的运行态配置，请先从默认配置创建首个版本。', true);
       }
       renderSummary(data.version, data.config);
       updateEditorCount();
-      if (showToast) notify('宸查噸鏂板姞杞藉綋鍓嶅彂甯冪増鏈€?);
+      if (showToast) notify('已重新加载当前发布版本。');
     } catch (error) {
       handleRequestError(error);
     } finally {
-      setBusy(nodes.reloadButton, false, '閲嶆柊鍔犺浇');
+      setBusy(nodes.reloadButton, false, '重新加载');
     }
   }
 
   async function loadVersions() {
-    setBusy(nodes.refreshVersionsButton, true, '鍒锋柊涓?);
+    setBusy(nodes.refreshVersionsButton, true, '刷新中');
     try {
       var payload = await request('/admin/v1/news-sources/versions');
       state.versions = (payload.data && payload.data.versions) || [];
@@ -119,12 +119,12 @@
     } catch (error) {
       handleRequestError(error);
     } finally {
-      setBusy(nodes.refreshVersionsButton, false, '鍒锋柊璁板綍');
+      setBusy(nodes.refreshVersionsButton, false, '刷新记录');
     }
   }
 
   function renderSummary(version, config) {
-    nodes.currentVersion.textContent = version && version.id ? shortId(version.id) : '榛樿閰嶇疆';
+    nodes.currentVersion.textContent = version && version.id ? shortId(version.id) : '默认配置';
     nodes.currentPublishedAt.textContent = version && version.publishedAt ? localDate(version.publishedAt) : '--';
     nodes.rssCount.textContent = config ? enabledCount(config.rss) : '--';
     nodes.wechatCount.textContent = config && config.wechat ? enabledCount(config.wechat.accounts) : '--';
@@ -132,15 +132,15 @@
 
   function renderVersions() {
     if (!state.versions.length) {
-      nodes.versionsBody.innerHTML = '<tr><td colspan="4" class="empty-table">杩樻病鏈夊凡鍙戝竷鐗堟湰銆?/td></tr>';
+      nodes.versionsBody.innerHTML = '<tr><td colspan="4" class="empty-table">还没有已发布版本。</td></tr>';
       return;
     }
     nodes.versionsBody.innerHTML = state.versions.map(function (version) {
       return '<tr>' +
         '<td>' + escapeHtml(localDate(version.published_at || version.publishedAt)) + '</td>' +
         '<td title="' + escapeHtml(version.id) + '">' + escapeHtml(shortId(version.id)) + '</td>' +
-        '<td>' + escapeHtml(version.change_note || version.changeNote || '鏈～鍐欏彉鏇磋鏄?) + '</td>' +
-        '<td><button class="version-action" type="button" data-version-id="' + escapeHtml(version.id) + '">杞藉叆姝ょ増鏈?/button></td>' +
+        '<td>' + escapeHtml(version.change_note || version.changeNote || '未填写变更说明') + '</td>' +
+        '<td><button class="version-action" type="button" data-version-id="' + escapeHtml(version.id) + '">载入此版本</button></td>' +
         '</tr>';
     }).join('');
   }
@@ -149,19 +149,19 @@
     var button = event.target.closest('[data-version-id]');
     if (!button) return;
     var versionId = button.getAttribute('data-version-id');
-    setBusy(button, true, '杞藉叆涓?);
+    setBusy(button, true, '载入中');
     try {
       var payload = await request('/admin/v1/news-sources/versions/' + encodeURIComponent(versionId));
       nodes.editor.value = JSON.stringify(payload.data.config, null, 2);
-      nodes.changeNote.value = '鍥炴粴鑷崇増鏈?' + shortId(versionId);
+      nodes.changeNote.value = '回滚至版本 ' + shortId(versionId);
       updateEditorCount();
-      setEditorStatus('宸茶浇鍏ュ巻鍙茬増鏈€傝妫€鏌ュ悗鍐嶆鍙戝竷锛屾墠浼氬湪涓嬩竴娆℃姄鍙栫敓鏁堛€?, false, true);
+      setEditorStatus('已载入历史版本。请检查后再次发布，才会在下一次抓取生效。', false, true);
       document.getElementById('editor').scrollIntoView({ behavior: 'smooth', block: 'start' });
-      notify('鍘嗗彶鐗堟湰宸茶浇鍏ョ紪杈戝櫒銆?);
+      notify('历史版本已载入编辑器。');
     } catch (error) {
       handleRequestError(error);
     } finally {
-      setBusy(button, false, '杞藉叆姝ょ増鏈?);
+      setBusy(button, false, '载入此版本');
     }
   }
 
@@ -170,7 +170,7 @@
     if (!config) return;
     nodes.editor.value = JSON.stringify(config, null, 2);
     updateEditorCount();
-    setEditorStatus('JSON 鏍煎紡姝ｇ‘锛屽凡鏍煎紡鍖栥€?, false, true);
+    setEditorStatus('JSON 格式正确，已格式化。', false, true);
   }
 
   function validateEditor() {
@@ -181,32 +181,32 @@
       setEditorStatus(errors.join(' '), true);
       return;
     }
-    setEditorStatus('JSON 鏍煎紡鍜屽熀纭€缁撴瀯妫€鏌ラ€氳繃銆傚彂甯冩椂灏嗙敱鏈嶅姟绔墽琛屽畬鏁存牎楠屻€?, false, true);
+    setEditorStatus('JSON 格式和基础结构检查通过。发布时将由服务端执行完整校验。', false, true);
   }
 
   function parseEditor() {
     var raw = nodes.editor.value.trim();
     if (!raw) {
-      setEditorStatus('閰嶇疆涓嶈兘涓虹┖銆?, true);
+      setEditorStatus('配置不能为空。', true);
       return null;
     }
     try {
       var parsed = JSON.parse(raw);
-      if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') throw new Error('閰嶇疆鏍硅妭鐐瑰繀椤绘槸 JSON 瀵硅薄銆?);
+      if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') throw new Error('配置根节点必须是 JSON 对象。');
       return parsed;
     } catch (error) {
-      setEditorStatus('JSON 鏍煎紡閿欒锛? + (error.message || '璇锋鏌ラ€楀彿鍜屽紩鍙枫€?), true);
+      setEditorStatus('JSON 格式错误：' + (error.message || '请检查逗号和引号。'), true);
       return null;
     }
   }
 
   function localConfigChecks(config) {
     var errors = [];
-    if (!Array.isArray(config.rss)) errors.push('rss 蹇呴』鏄暟缁勩€?);
-    if (!Array.isArray(config.hotlists)) errors.push('hotlists 蹇呴』鏄暟缁勩€?);
-    if (!config.wechat || !Array.isArray(config.wechat.accounts)) errors.push('wechat.accounts 蹇呴』鏄暟缁勩€?);
-    if (!Array.isArray(config.keywordGroups) || !config.keywordGroups.length) errors.push('keywordGroups 涓嶈兘涓虹┖銆?);
-    if (!config.settings || typeof config.settings !== 'object') errors.push('settings 蹇呴』鏄璞°€?);
+    if (!Array.isArray(config.rss)) errors.push('rss 必须是数组。');
+    if (!Array.isArray(config.hotlists)) errors.push('hotlists 必须是数组。');
+    if (!config.wechat || !Array.isArray(config.wechat.accounts)) errors.push('wechat.accounts 必须是数组。');
+    if (!Array.isArray(config.keywordGroups) || !config.keywordGroups.length) errors.push('keywordGroups 不能为空。');
+    if (!config.settings || typeof config.settings !== 'object') errors.push('settings 必须是对象。');
     return errors;
   }
 
@@ -216,21 +216,21 @@
     var errors = localConfigChecks(config);
     if (errors.length) return setMessage(nodes.publishMessage, errors.join(' '), true);
     var note = nodes.changeNote.value.trim();
-    if (!note) return setMessage(nodes.publishMessage, '璇峰～鍐欐湰娆″彉鏇磋鏄庯紝渚夸簬鍚庣画鍥炴粴鏍稿銆?, true);
-    if (!window.confirm('纭鍙戝竷姝ら厤缃紵涓嬩竴娆℃柊闂绘姄鍙栧皢浣跨敤鏂扮増鏈€?)) return;
-    setBusy(nodes.publishButton, true, '鍙戝竷涓?);
-    setMessage(nodes.publishMessage, '姝ｅ湪鎻愪氦骞舵墽琛屾湇鍔＄鏍￠獙銆?);
+    if (!note) return setMessage(nodes.publishMessage, '请填写本次变更说明，便于后续回滚核对。', true);
+    if (!window.confirm('确认发布此配置？下一次新闻抓取将使用新版本。')) return;
+    setBusy(nodes.publishButton, true, '发布中');
+    setMessage(nodes.publishMessage, '正在提交并执行服务端校验。');
     try {
       var payload = await request('/admin/v1/news-sources/publish', { method: 'POST', body: { config: config, changeNote: note } });
       var version = payload.data && payload.data.version;
-      setMessage(nodes.publishMessage, '鍙戝竷鎴愬姛锛? + (version ? shortId(version.id) : '鏂扮増鏈?) + '銆備笅涓€娆℃姄鍙栧皢鑷姩鍔犺浇銆?, false, true);
+      setMessage(nodes.publishMessage, '发布成功：' + (version ? shortId(version.id) : '新版本') + '。下一次抓取将自动加载。', false, true);
       nodes.changeNote.value = '';
       await Promise.all([loadCurrent(false), loadVersions()]);
-      notify('鏂伴椈淇℃簮閰嶇疆宸插彂甯冦€?);
+      notify('新闻信源配置已发布。');
     } catch (error) {
-      setMessage(nodes.publishMessage, error.message || '鍙戝竷澶辫触锛岃妫€鏌ラ厤缃€?, true);
+      setMessage(nodes.publishMessage, error.message || '发布失败，请检查配置。', true);
     } finally {
-      setBusy(nodes.publishButton, false, '鍙戝竷骞朵笅娆＄敓鏁?);
+      setBusy(nodes.publishButton, false, '发布并下次生效');
     }
   }
 
@@ -243,15 +243,15 @@
     try {
       response = await fetch(API_BASE + path, { method: options.method || 'GET', headers: headers, body: options.body === undefined ? undefined : JSON.stringify(options.body), mode: 'cors' });
     } catch {
-      throw new Error('鏃犳硶杩炴帴鏂伴椈鍚庡彴銆傝妫€鏌ョ綉缁滄垨鍚庡彴鏈嶅姟鐘舵€併€?);
+      throw new Error('无法连接新闻后台。请检查网络或后台服务状态。');
     }
     var payload = null;
-    try { payload = await response.json(); } catch { throw new Error('鍚庡彴杩斿洖浜嗘棤娉曡瘑鍒殑鍝嶅簲銆?); }
+    try { payload = await response.json(); } catch { throw new Error('后台返回了无法识别的响应。'); }
     if (!response.ok || !payload.ok) {
-      var message = payload && payload.error && payload.error.message ? payload.error.message : '璇锋眰鏈垚鍔熴€?;
+      var message = payload && payload.error && payload.error.message ? payload.error.message : '请求未成功。';
       var code = payload && payload.error && payload.error.code;
       if (response.status === 401 || code === 'UNAUTHORIZED') {
-        if (options.auth !== false) logout('绠＄悊鍛樹細璇濆凡澶辨晥锛岃閲嶆柊鐧诲綍銆?);
+        if (options.auth !== false) logout('管理员会话已失效，请重新登录。');
       }
       throw new Error(message);
     }
@@ -259,11 +259,11 @@
   }
 
   function handleRequestError(error) {
-    if (state.token) notify(error.message || '璇锋眰澶辫触銆?, true);
+    if (state.token) notify(error.message || '请求失败。', true);
   }
 
   function updateEditorCount() {
-    nodes.editorCount.textContent = nodes.editor.value.length.toLocaleString('zh-CN') + ' 瀛楃';
+    nodes.editorCount.textContent = nodes.editor.value.length.toLocaleString('zh-CN') + ' 字符';
   }
 
   function setEditorStatus(message, error, success) {
